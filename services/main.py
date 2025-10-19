@@ -75,7 +75,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 @app.get('/', response_class=HTMLResponse, tags=['UI'], summary='SAFT Validator')
 def root_ui():
     """Serve the SAFT Validator UI at root."""
-    return HTMLResponse(content=UI_HTML)
+    # Avoid stale cache serving old JS/HTML in browsers/CDNs
+    return HTMLResponse(content=UI_HTML, headers={'Cache-Control': 'no-store'})
 
 @app.get('/info', tags=['Health'], summary='API Info')
 def api_info():
@@ -234,6 +235,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Reque
     })
     return {'access_token':token,'token_type':'bearer'}
 
+# Moved below get_current_user definition to ensure symbol resolution
+
 @app.get('/health/db', tags=['Health'], summary='Database Health')
 async def health_db(db=Depends(get_db)):
     try:
@@ -282,6 +285,10 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
 
 from saft_pt_doctor.routers_pt import router as router_pt
 app.include_router(router_pt, prefix='/pt')
+
+@app.get('/auth/me', tags=['Authentication'], summary='Current user')
+async def auth_me(current=Depends(get_current_user)):
+    return current
 
 @app.on_event('startup')
 async def _bootstrap_default_user():
@@ -344,6 +351,9 @@ UI_HTML = """
                 el.scrollTop = el.scrollHeight;
             }
             function clearLog() { const el = document.getElementById('log'); el.textContent=''; }
+            window.addEventListener('error', (e) => {
+                try { setStatus('JS error: ' + (e.message || '(no message)')); } catch(_){}
+            });
 
         function showTab(id) {
             for (const el of document.querySelectorAll('.tab')) el.classList.remove('active');
@@ -724,6 +734,9 @@ UI_HTML = """
                     <button class="btn" onclick="loginUser()">Login</button>
                     <button class="btn" onclick="loginDev()" title="Quick dev login">Login dev/dev</button>
                     <span id="token_status" class="ok" style="margin-left:.5rem;">Not authenticated</span>
+                </div>
+                <div class="row mt">
+                    <button class="btn" onclick="(async()=>{ try { const r=await fetch('/auth/me',{ headers: state.token? { Authorization: 'Bearer '+state.token } : {} }); const t=await r.text(); setStatus('Auth self-test HTTP '+r.status+': '+t.slice(0,200)); } catch(e){ setStatus('Self-test error: '+e.message);} })()">Self-test</button>
                 </div>
             </div>
 
