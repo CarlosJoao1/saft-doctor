@@ -141,22 +141,27 @@ async def register(user: dict, request: Request, db=Depends(get_db)):
         "country": country
     })
     
-    if await repo.exists(user['username']): 
-        logger.warning("Registration failed - username already exists", extra={
-            "username": user.get('username'),
+    try:
+        if await repo.exists(user['username']): 
+            logger.warning("Registration failed - username already exists", extra={
+                "username": user.get('username'),
+                "country": country
+            })
+            raise HTTPException(status_code=400, detail='Username already exists')
+
+        created=await repo.create(user['username'], hash_password(user['password']))
+
+        logger.info("User registered successfully", extra={
+            "user_id": str(created['_id']),
+            "username": created['username'],
             "country": country
         })
-        raise HTTPException(status_code=400, detail='Username already exists')
-    
-    created=await repo.create(user['username'], hash_password(user['password']))
-    
-    logger.info("User registered successfully", extra={
-        "user_id": str(created['_id']),
-        "username": created['username'],
-        "country": country
-    })
-    
-    return {'id':str(created['_id']),'username':created['username'],'country':country}
+        return {'id':str(created['_id']),'username':created['username'],'country':country}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Registration failed due to DB error", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail='Database unavailable. Configure MONGO_URI/MONGO_DB and ensure Atlas allows access.')
 
 @app.post('/auth/token', tags=['Authentication'], summary="User Login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None, db=Depends(get_db)):
@@ -182,22 +187,37 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Reque
         "country": country
     })
     
-    u=await repo.get(form_data.username)
-    if not u or not verify_password(form_data.password, u['password_hash']): 
-        logger.warning("Login failed - invalid credentials", extra={
+    try:
+        u=await repo.get(form_data.username)
+        if not u or not verify_password(form_data.password, u['password_hash']): 
+            logger.warning("Login failed - invalid credentials", extra={
+                "username": form_data.username,
+                "country": country
+            })
+            raise HTTPException(status_code=400, detail='Incorrect username or password')
+        
+        token=create_access_token({'sub':form_data.username,'cty':country})
+        
+        logger.info("Login successful", extra={
             "username": form_data.username,
             "country": country
         })
-        raise HTTPException(status_code=400, detail='Incorrect username or password')
-    
-    token=create_access_token({'sub':form_data.username,'cty':country})
-    
-    logger.info("Login successful", extra={
-        "username": form_data.username,
-        "country": country
-    })
-    
-    return {'access_token':token,'token_type':'bearer'}
+        
+        return {'access_token':token,'token_type':'bearer'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Login failed due to DB error", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail='Database unavailable. Configure MONGO_URI/MONGO_DB and ensure Atlas allows access.')
+
+@app.get('/health/db', tags=['Health'], summary='Database Health')
+async def health_db(db=Depends(get_db)):
+    try:
+        # Ping the server
+        await db.command('ping')
+        return { 'ok': True }
+    except Exception as e:
+        return { 'ok': False, 'error': str(e) }
 
 async def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db=Depends(get_db)):
     """
