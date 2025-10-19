@@ -83,9 +83,23 @@ def jar_run_check():
         stdout=(out.stdout or '').strip()
         stderr=(out.stderr or '').strip()
         preview=(stdout or stderr)[:2000]
-        return {"ok": out.returncode==0, "returncode": out.returncode, "preview": preview}
+        return {"ok": out.returncode==0, "returncode": out.returncode, "stdout": stdout[:1000], "stderr": stderr[:1000], "preview": preview}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "Timeout while invoking jar", "returncode": None}
+
+
+@router.get("/java/version")
+def java_version():
+    try:
+        out = subprocess.run(['java','-version'], capture_output=True, text=True, timeout=5)
+        # java -version writes to stderr typically
+        stdout = (out.stdout or '').strip()
+        stderr = (out.stderr or '').strip()
+        return { 'ok': out.returncode==0, 'stdout': stdout, 'stderr': stderr, 'returncode': out.returncode }
+    except FileNotFoundError:
+        return { 'ok': False, 'error': 'java executable not found on PATH' }
+    except subprocess.TimeoutExpired:
+        return { 'ok': False, 'error': 'Timeout while checking java -version' }
 
 
 @router.post("/secrets/at", response_model=ATSecretOut)
@@ -240,11 +254,19 @@ async def validate_with_jar(
         out_text = (stdout.decode() if stdout else '') + (('\n' + stderr.decode()) if stderr else '')
         ok = (proc.returncode == 0)
         preview = out_text[:4000]
-        return { 'ok': ok, 'returncode': proc.returncode, 'output': preview, 'args': {'nif':nif,'year':year,'month':month} }
+        return { 'ok': ok, 'returncode': proc.returncode, 'output': preview, 'args': {'nif':nif,'year':year,'month':month}, 'cmd': cmd if os.getenv('EXPOSE_CMD','0')=='1' else None }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to invoke JAR: {str(e)}")
+        etype = e.__class__.__name__
+        msg = str(e)
+        hint = None
+        if etype == 'FileNotFoundError':
+            hint = "java executable not found on PATH or JAR path invalid"
+        detail = f"Failed to invoke JAR: {etype}: {msg}"
+        if hint:
+            detail += f" (hint: {hint})"
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @router.post("/submit")
