@@ -78,3 +78,34 @@ def validate_saft(root: ET.Element) -> Tuple[List[Dict[str, Any]], Dict[str, Any
         issues.append({'level': 'warning', 'code': 'NO_TRANSACTIONS', 'message': 'No GeneralLedgerEntries or SourceDocuments section found', 'path': '/AuditFile'})
 
     return issues, summary
+
+
+def extract_cli_params(root: ET.Element) -> Dict[str, Optional[str]]:
+    """Extract parameters needed by FACTEMICLI.jar from the SAFT XML root.
+
+    Returns keys: nif, year, month (all strings or None if missing).
+    month is derived from StartDate (taking the MM part if in ISO format).
+    """
+    params: Dict[str, Optional[str]] = { 'nif': None, 'year': None, 'month': None }
+    if _local(root.tag) != 'AuditFile':
+        return params
+    header = None
+    for child in root:
+        if _local(child.tag) == 'Header':
+            header = child; break
+    if header is None:
+        return params
+    nif = extract_text(header, 'TaxRegistrationNumber')
+    year = extract_text(header, 'FiscalYear')
+    start = extract_text(header, 'StartDate')
+    month = None
+    if start:
+        # Expecting YYYY-MM-DD or similar; take middle component
+        parts = start.strip().split('-')
+        if len(parts) >= 2 and parts[1].isdigit():
+            m = parts[1]
+            # normalize to 2-digit month
+            if len(m) == 1: m = f'0{m}'
+            month = m
+    params['nif']=nif; params['year']=year; params['month']=month
+    return params

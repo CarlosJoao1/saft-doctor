@@ -342,6 +342,25 @@ UI_HTML = """
             }
         }
 
+            async function validateWithJar() {
+                if (!state.token) { setStatus('Login first.'); return; }
+                const fileInput = document.getElementById('file');
+                const out = document.getElementById('out');
+                if (!fileInput.files.length) { setStatus('Choose a SAFT XML file'); return; }
+                setStatus('Validating via FACTEMICLI.jar…');
+                const f = fileInput.files[0];
+                const fd = new FormData(); fd.append('file', f);
+                try {
+                    const r = await fetch('/pt/validate-jar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + state.token }, body: fd });
+                    const txt = await r.text(); let data=null; try { data = txt ? JSON.parse(txt) : null; } catch(_){}
+                    if (!r.ok) throw new Error((data && data.detail) || (txt ? txt.slice(0,300) : 'Validation failed'));
+                    out.textContent = data ? JSON.stringify(data, null, 2) : (txt || 'OK');
+                    setStatus('JAR validation done.');
+                } catch (e) {
+                    setStatus('JAR validation error: ' + e.message);
+                }
+            }
+
             async function checkJarStatus() {
                 const out = document.getElementById('out');
                 out.textContent = 'Checking JAR status…';
@@ -515,6 +534,7 @@ UI_HTML = """
         <div class="row">
                     <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
             <button class="btn" id="btn" onclick="validate()">Validate</button>
+            <button class="btn" onclick="validateWithJar()">Validate with JAR</button>
         </div>
         <div class="mt">
             <pre id="out"></pre>
@@ -589,6 +609,22 @@ UI_HTML = """
                 <li>Evita usar <code>curl -L</code> com URLs presignados S3 (o redirect quebra a assinatura). Se precisares de um link temporário, usa "Presigned Download" nesta aba.</li>
                 <li>Para atualizar o JAR no futuro, substitui o ficheiro no B2 (mesmo <code>object_key</code>) e clica novamente em <b>Install JAR</b>.</li>
             </ol>
+            <h4 class="mt">Checklist pós-instalação</h4>
+            <ol>
+                <li>Clica em <b>Check JAR status</b> (separador Aplicação) — deve mostrar <code>ok:true</code> e <code>size</code> ~2.8 MB.</li>
+                <li>Clica em <b>Run JAR check</b> — deve aparecer um pequeno <i>preview/usage</i> do JAR.</li>
+                <li>Em <b>Auth</b>, faz <i>Register</i> e <i>Login</i> (se necessário) e confirma "Authenticated".</li>
+                <li>Em <b>AT Secrets</b>, grava as credenciais da AT (ficam encriptadas no servidor).</li>
+                <li>Em <b>Upload & Submit</b>, faz <i>Upload via Presign</i> (guarda o <code>object_key</code>) e depois <i>Submit</i>.</li>
+                <li>Se o <i>Submit</i> falhar, lê a mensagem de erro (pode ser do JAR ou de credenciais AT). Ajusta e repete.</li>
+            </ol>
+            <h4 class="mt">Resolução de problemas</h4>
+            <ul>
+                <li><b>Access denied ao instalar</b>: verifica permissões da Application Key (readFiles/s3:GetObject) e se o objeto existe em <code>pt/tools/FACTEMICLI.jar</code>.</li>
+                <li><b>Invalid or corrupt jarfile</b> após download manual: evita <code>-L</code> com presign; usa o botão <b>Install JAR</b> que usa o SDK (sem redirects).</li>
+                <li><b>JWT inválido</b>: volta a fazer <i>Login</i> e tenta outra vez.</li>
+                <li><b>Mongo indisponível</b>: /health/db deve ser <code>{ ok: true }</code>; se não, revê MONGO_URI/MONGO_DB e IP allowlist.</li>
+            </ul>
             <div class="row mt">
                 <input id="jar_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
                 <button class="btn" onclick="installJar()">Install JAR</button>

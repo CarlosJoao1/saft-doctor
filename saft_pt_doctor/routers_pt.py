@@ -12,6 +12,7 @@ import os
 import os.path
 import subprocess
 from pathlib import Path
+import asyncio
 try:
     from botocore.exceptions import ClientError  # type: ignore
 except Exception:  # pragma: no cover
@@ -28,6 +29,11 @@ def get_country(request: Request) -> str:
     # In future, derive from path/headers; reference request to satisfy linters
     _ = request
     return "pt"
+
+
+def _jar_path() -> str:
+    # Centralize JAR path resolution to avoid duplicated literals
+    return os.getenv('FACTEMICLI_JAR_PATH', '/opt/factemi/FACTEMICLI.jar')
 
 
 async def get_current_user(
@@ -55,7 +61,7 @@ def health_pt():
 
 @router.get("/jar/status")
 def jar_status():
-    path=os.getenv('FACTEMICLI_JAR_PATH','/opt/factemi/FACTEMICLI.jar')
+    path=_jar_path()
     exists=os.path.isfile(path)
     size=None
     if exists:
@@ -68,7 +74,7 @@ def jar_status():
 
 @router.get("/jar/run-check")
 def jar_run_check():
-    path=os.getenv('FACTEMICLI_JAR_PATH','/opt/factemi/FACTEMICLI.jar')
+    path=_jar_path()
     if not os.path.isfile(path):
         return {"ok": False, "error": f"FACTEMICLI.jar not found at {path}", "path": path}
     try:
@@ -144,7 +150,7 @@ async def jar_install(
     full = body.object_key if body.object_key.startswith(f"{country}/") else f"{country}/{body.object_key}"
 
     # Ensure target directory exists
-    target_path = os.getenv("FACTEMICLI_JAR_PATH", "/opt/factemi/FACTEMICLI.jar")
+    target_path = _jar_path()
     Path(os.path.dirname(target_path)).mkdir(parents=True, exist_ok=True)
 
     # Download from bucket to target path
@@ -167,6 +173,78 @@ async def jar_install(
     except Exception:
         pass
     return {"ok": True, "path": target_path, "size": size, "object": full}
+
+
+@router.post("/validate-jar")
+async def validate_with_jar(
+    request: Request,
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Validate a SAFT XML by invoking FACTEMICLI.jar with CLI params extracted from XML.
+
+    Extracts: NIF (TaxRegistrationNumber), FiscalYear, and month from StartDate.
+    Uses the user's stored AT password. Requires that FACTEMICLI.jar is installed.
+    """
+    from core.saft_validator import parse_xml, extract_cli_params
+    from core.security import decrypt
+    import tempfile
+
+    # Prepare local temp file (perform sync I/O in a worker thread to keep endpoint responsive)
+    data = await file.read()
+    def _write_tmp(payload: bytes) -> str:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp:
+            tmp.write(payload)
+            return tmp.name
+    saft_path = await asyncio.to_thread(_write_tmp, data)
+
+    # Extract params from XML
+    try:
+        root = parse_xml(data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
+    params = extract_cli_params(root)
+    nif = params.get('nif'); year = params.get('year'); month = params.get('month')
+    missing = [k for k in ['nif','year','month'] if not params.get(k)]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing fields in XML for CLI: {', '.join(missing)}")
+
+    # Get AT password
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    u = await repo.get(current["username"])
+    if not u or not u.get("at"):
+        raise HTTPException(status_code=400, detail="AT credentials not set")
+    at_pass = decrypt(u["at"]["pass"])
+
+    # Build command
+    jar_path = _jar_path()
+    if not os.path.isfile(jar_path):
+        raise HTTPException(status_code=400, detail=f"FACTEMICLI.jar not found at {jar_path}")
+    # Some tools expect @ before the path to indicate file input; keep close to provided spec
+    input_arg = '@' + saft_path
+    cmd = ['java','-jar',jar_path,'-n',nif,'-p',at_pass,'-a',year,'-m',month,'-op','enviar','-i',input_arg]
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise HTTPException(status_code=504, detail="Validation timed out")
+        out_text = (stdout.decode() if stdout else '') + (('\n' + stderr.decode()) if stderr else '')
+        ok = (proc.returncode == 0)
+        preview = out_text[:4000]
+        return { 'ok': ok, 'returncode': proc.returncode, 'output': preview, 'args': {'nif':nif,'year':year,'month':month} }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to invoke JAR: {str(e)}")
 
 
 @router.post("/submit")
