@@ -22,6 +22,10 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Arquivo .gitignore abrangente
 - Pipeline de segurança com Bandit e Safety
 - Build multi-arquitetura (amd64/arm64)
+- Templates GitHub para Issues (Bug Report, Feature Request)
+- Template de Pull Request
+- Guia GETTING_STARTED.md com instruções completas
+- Script PowerShell para facilitar push inicial (`push-to-github.ps1`)
 
 ### Melhorado
 - README.md com documentação completa e estruturada
@@ -30,6 +34,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Tratamento de erros com logging contextual
 - Configuração Docker otimizada para desenvolvimento
 - Documentação técnica e de contribuição
+
+### Corrigido
+- Configuração do Render.com para deployment correto
+- Caminho do Dockerfile e contexto de build no render.yaml
+- URL do repositório no render.yaml
 
 ### Segurança
 - Validação de SECRET_KEY em ambiente de produção
