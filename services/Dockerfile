@@ -4,6 +4,6 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD curl -fsS http://localhost:8080/health || exit 1
+RUN chmod +x /app/entrypoint.sh
 EXPOSE 8080
-CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8080"]
+ENTRYPOINT ["/app/entrypoint.sh"]
