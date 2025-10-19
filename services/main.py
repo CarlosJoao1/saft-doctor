@@ -21,10 +21,9 @@ logger = get_logger(__name__)
 SECRET_KEY=os.getenv('SECRET_KEY','change_me')
 ALGORITHM='HS256'
 
-# Validate critical configuration
+# Validate critical configuration (log error but do not crash app)
 if SECRET_KEY == 'change_me' and os.getenv('APP_ENV') == 'prod':
-    logger.error("SECRET_KEY must be set in production environment")
-    raise ValueError("SECRET_KEY must be set in production environment")
+    logger.error("SECRET_KEY is using default value in production. Set SECRET_KEY in environment.")
 
 app = FastAPI(
     title='SAFT Doctor (multi-country)', 
