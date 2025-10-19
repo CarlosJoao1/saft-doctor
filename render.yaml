@@ -4,11 +4,11 @@ services:
   env: docker
   plan: starter
   autoDeploy: true
-  repo: https://github.com/OWNER/saft-doctor
+  repo: https://github.com/CarlosJoao1/saft-doctor
   branch: main
-  dockerfilePath: services/Dockerfile
-  buildCommand: ""
-  startCommand: sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"
+  dockerfilePath: ./services/Dockerfile
+  dockerContext: ./services
+  startCommand: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
   envVars:
   - { key: APP_ENV, value: prod }
   - { key: DEFAULT_COUNTRY, value: pt }
