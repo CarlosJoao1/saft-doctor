@@ -18,6 +18,12 @@ class LocalStorage:
         path=tempfile.NamedTemporaryFile(delete=False, suffix='_saft.xml').name
         with open(path,'wb') as f: f.write(self._data[k])
         return path
+    async def presign_put(self, country, key, content_type=None, expires=900):
+        full=key if key.startswith(f"{country}/") else f"{country}/{key}"
+        return { 'url': f'https://example.com/put/{full}', 'headers': {'Content-Type': content_type} if content_type else {}, 'object': full, 'expires_in': expires }
+    async def presign_get(self, country, key, expires=900):
+        full=key if key.startswith(f"{country}/") else f"{country}/{key}"
+        return { 'url': f'https://example.com/get/{full}', 'object': full, 'expires_in': expires }
 
 @pytest.fixture(autouse=True)
 def patch_storage(monkeypatch):

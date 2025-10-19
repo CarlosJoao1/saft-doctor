@@ -5,7 +5,7 @@ import os
 from core.deps import get_db
 from core.auth_repo import UsersRepo
 from core.security import encrypt, decrypt
-from core.models import ATSecretIn, ATSecretOut
+from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadOut, PresignDownloadIn, PresignDownloadOut
 from core.storage import Storage
 from core.submitter import Submitter
 
@@ -67,6 +67,26 @@ async def upload_file(
         country, file.filename, await file.read(), content_type=file.content_type
     )
     return {"ok": True, "object": key}
+
+
+@router.post("/files/presign-upload", response_model=PresignUploadOut)
+async def presign_upload(
+    body: PresignUploadIn, request: Request, current=Depends(get_current_user)
+):
+    country = get_country(request)
+    storage = Storage()
+    out = await storage.presign_put(country, body.filename, content_type=body.content_type)
+    return out
+
+
+@router.post("/files/presign-download", response_model=PresignDownloadOut)
+async def presign_download(
+    body: PresignDownloadIn, request: Request, current=Depends(get_current_user)
+):
+    country = get_country(request)
+    storage = Storage()
+    out = await storage.presign_get(country, body.object_key)
+    return out
 
 
 @router.post("/submit")

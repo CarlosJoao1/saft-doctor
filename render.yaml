@@ -21,4 +21,6 @@ services:
   - { key: B2_KEY_ID, sync: false }
   - { key: B2_APP_KEY, sync: false }
   - { key: FACTEMICLI_JAR_PATH, value: /opt/factemi/FACTEMICLI.jar }
+  # If using Render Persistent Disk, mount it at /opt/factemi and place FACTEMICLI.jar there.
+  # See Render docs. Ensure the path above matches the mount point.
   - { key: SUBMIT_TIMEOUT_MS, value: "600000" }
