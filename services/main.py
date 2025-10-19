@@ -529,6 +529,36 @@ UI_HTML = """
                         setStatus('Download URL ready.');
                     } catch (e) { setStatus('Presign download error: ' + e.message); }
                 }
+
+                async function loadCredsStatus() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    try {
+                        const r = await fetch('/pt/secrets/at/status', { headers: { 'Authorization': 'Bearer ' + state.token } });
+                        const j = await r.json();
+                        document.getElementById('creds_user_mask').textContent = j.username_masked || '(none)';
+                        document.getElementById('creds_updated').textContent = j.updated_at || '(unknown)';
+                        setStatus(j.ok ? 'Credentials status loaded.' : 'No credentials saved.');
+                    } catch (e) { setStatus('Load creds error: ' + e.message); }
+                }
+
+                async function saveAT2() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    const au = document.getElementById('at_user2').value.trim();
+                    const ap = document.getElementById('at_pass2').value;
+                    if (!au || !ap) { setStatus('Fill AT username and password.'); return; }
+                    setStatus('Saving AT credentials…');
+                    try {
+                        const r = await fetch('/pt/secrets/at', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                            body: JSON.stringify({ username: au, password: ap })
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Failed to save creds');
+                        setStatus('AT credentials saved.');
+                        loadCredsStatus();
+                    } catch (e) { setStatus('Save AT error: ' + e.message); }
+                }
     </script>
 </head>
 <body>
@@ -539,6 +569,7 @@ UI_HTML = """
     <div class="tabs">
         <div class="tab active" data-tab="app" onclick="showTab('app')">Aplicação</div>
         <div class="tab" data-tab="config" onclick="showTab('config')">Configuração</div>
+        <div class="tab" data-tab="creds" onclick="showTab('creds')">Credenciais</div>
     </div>
 
     <div id="panel-app" class="tabpanel active">
@@ -638,6 +669,9 @@ UI_HTML = """
                 <li><b>JWT inválido</b>: volta a fazer <i>Login</i> e tenta outra vez.</li>
                 <li><b>Mongo indisponível</b>: /health/db deve ser <code>{ ok: true }</code>; se não, revê MONGO_URI/MONGO_DB e IP allowlist.</li>
             </ul>
+            <h4 class="mt">Linha de comando (referência)</h4>
+            <p>Usamos os campos do XML para preencher os parâmetros; só a senha AT vem do utilizador:</p>
+            <pre>java -jar FACTEMICLI.jar -n &lt;TaxRegistrationNumber&gt; -p &lt;SENHA_AT&gt; -a &lt;FiscalYear&gt; -m &lt;MM_de_StartDate&gt; -op enviar -i @&lt;caminho_para_xml&gt;</pre>
             <div class="row mt">
                 <input id="jar_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
                 <button class="btn" onclick="installJar()">Install JAR</button>
@@ -652,6 +686,26 @@ UI_HTML = """
                 <button class="btn" onclick="presignDownload()">Get download URL</button>
             </div>
             <div class="mt">URL: <code id="dl_url">(none)</code></div>
+        </div>
+    </div>
+
+    <div id="panel-creds" class="tabpanel">
+        <div class="card">
+            <h3>Credenciais AT</h3>
+            <p>As credenciais são guardadas encriptadas no servidor. Mostramos apenas uma máscara do username.</p>
+            <div class="row mt">
+                <button class="btn" onclick="loadCredsStatus()">Atualizar estado</button>
+                <span>Username (mask): <code id="creds_user_mask">(unknown)</code></span>
+                <span>Atualizado em: <code id="creds_updated">(unknown)</code></span>
+            </div>
+        </div>
+        <div class="card" style="margin-top:1rem;">
+            <h3>Atualizar credenciais AT</h3>
+            <div class="row mt">
+                <input placeholder="AT username" id="at_user2" />
+                <input placeholder="AT password" id="at_pass2" type="password" />
+                <button class="btn" onclick="saveAT2()">Guardar</button>
+            </div>
         </div>
     </div>
 

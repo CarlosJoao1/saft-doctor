@@ -117,6 +117,34 @@ async def save_at_secret(
     return ATSecretOut(ok=True)
 
 
+@router.get('/secrets/at/status')
+async def at_secret_status(request: Request, current=Depends(get_current_user), db=Depends(get_db)):
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    u = await repo.get(current["username"])
+    at = u.get('at') if u else None
+    if not at:
+        return { 'ok': False, 'has_credentials': False }
+    # Mask username (first 3 chars + **** + last 2 if available)
+    try:
+        from core.security import decrypt
+        user = decrypt(at['user']) if at.get('user') else None
+    except Exception:
+        user = None
+    masked = None
+    if user:
+        if len(user) <= 5:
+            masked = user[0] + '***'
+        else:
+            masked = user[:3] + '****' + user[-2:]
+    return {
+        'ok': True,
+        'has_credentials': True,
+        'username_masked': masked,
+        'updated_at': at.get('updated_at')
+    }
+
+
 @router.post("/files/upload")
 async def upload_file(
     request: Request, file: UploadFile = File(...), current=Depends(get_current_user)
