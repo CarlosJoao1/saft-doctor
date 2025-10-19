@@ -141,6 +141,7 @@ async def register(user: dict, request: Request, db=Depends(get_db)):
         "country": country
     })
     
+    # 1) Check duplicates (DB)
     try:
         if await repo.exists(user['username']): 
             logger.warning("Registration failed - username already exists", extra={
@@ -148,20 +149,31 @@ async def register(user: dict, request: Request, db=Depends(get_db)):
                 "country": country
             })
             raise HTTPException(status_code=400, detail='Username already exists')
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Registration 'exists' check failed", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail='Database unavailable (exists check). Verify MONGO_URI/MONGO_DB and Atlas network access.')
 
-        created=await repo.create(user['username'], hash_password(user['password']))
+    # 2) Hash password (crypto)
+    try:
+        pwd_hash = hash_password(user['password'])
+    except Exception as e:
+        logger.error("Password hashing failed", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail='Server crypto error while hashing password.')
 
+    # 3) Create user (DB)
+    try:
+        created=await repo.create(user['username'], pwd_hash)
         logger.info("User registered successfully", extra={
             "user_id": str(created['_id']),
             "username": created['username'],
             "country": country
         })
         return {'id':str(created['_id']),'username':created['username'],'country':country}
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Registration failed due to DB error", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail='Database unavailable. Configure MONGO_URI/MONGO_DB and ensure Atlas allows access.')
+        logger.error("Registration failed at create", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail='Database unavailable (create). Verify MONGO_URI/MONGO_DB and Atlas network access.')
 
 @app.post('/auth/token', tags=['Authentication'], summary="User Login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None, db=Depends(get_db)):
@@ -187,28 +199,34 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Reque
         "country": country
     })
     
+    # 1) Fetch user (DB)
     try:
         u=await repo.get(form_data.username)
+    except Exception as e:
+        logger.error("Login failed at get(user)", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail='Database unavailable (get user).')
+
+    # 2) Verify password (crypto)
+    try:
         if not u or not verify_password(form_data.password, u['password_hash']): 
             logger.warning("Login failed - invalid credentials", extra={
                 "username": form_data.username,
                 "country": country
             })
             raise HTTPException(status_code=400, detail='Incorrect username or password')
-        
-        token=create_access_token({'sub':form_data.username,'cty':country})
-        
-        logger.info("Login successful", extra={
-            "username": form_data.username,
-            "country": country
-        })
-        
-        return {'access_token':token,'token_type':'bearer'}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Login failed due to DB error", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail='Database unavailable. Configure MONGO_URI/MONGO_DB and ensure Atlas allows access.')
+        logger.error("Password verification failed", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail='Server crypto error while verifying password.')
+
+    # 3) Issue token
+    token=create_access_token({'sub':form_data.username,'cty':country})
+    logger.info("Login successful", extra={
+        "username": form_data.username,
+        "country": country
+    })
+    return {'access_token':token,'token_type':'bearer'}
 
 @app.get('/health/db', tags=['Health'], summary='Database Health')
 async def health_db(db=Depends(get_db)):
