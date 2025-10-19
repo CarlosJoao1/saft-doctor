@@ -62,11 +62,23 @@ app.add_middleware(
     allow_headers=['*']
 )
 
+# Mount static folder for future assets (JS/CSS)
+try:
+    app.mount('/static', StaticFiles(directory='static'), name='static')
+except Exception:
+    # If static folder missing at runtime, ignore
+    pass
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 
-@app.get('/', tags=['Health'], summary='API Root')
-def root():
-    """Root endpoint with quick links and status."""
+@app.get('/', response_class=HTMLResponse, tags=['UI'], summary='SAFT Validator')
+def root_ui():
+    """Serve the SAFT Validator UI at root."""
+    return HTMLResponse(content=UI_HTML)
+
+@app.get('/info', tags=['Health'], summary='API Info')
+def api_info():
+    """JSON info with links and status."""
     return {
         'name': 'SAFT Doctor API',
         'status': 'ok',
