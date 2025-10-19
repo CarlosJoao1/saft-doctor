@@ -281,6 +281,30 @@ UI_HTML = """
                 btn.disabled = false; btn.textContent = 'Validate';
             }
         }
+
+            async function checkJarStatus() {
+                const out = document.getElementById('out');
+                out.textContent = 'Checking JAR status…';
+                try {
+                    const r = await fetch('/pt/jar/status');
+                    const j = await r.json();
+                    out.textContent = JSON.stringify(j, null, 2);
+                } catch (e) {
+                    out.textContent = 'Error: ' + e;
+                }
+            }
+
+            async function runJarCheck() {
+                const out = document.getElementById('out');
+                out.textContent = 'Running JAR check…';
+                try {
+                    const r = await fetch('/pt/jar/run-check');
+                    const j = await r.json();
+                    out.textContent = JSON.stringify(j, null, 2);
+                } catch (e) {
+                    out.textContent = 'Error: ' + e;
+                }
+            }
     </script>
 </head>
 <body>
@@ -297,6 +321,13 @@ UI_HTML = """
             <pre id="out"></pre>
         </div>
     </div>
+
+        <div class="card" style="margin-top:1rem;">
+            <div class="row">
+                <button class="btn" onclick="checkJarStatus()">Check JAR status</button>
+                <button class="btn" onclick="runJarCheck()">Run JAR check</button>
+            </div>
+        </div>
 </body>
 </html>
 """

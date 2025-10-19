@@ -10,6 +10,7 @@ from core.storage import Storage
 from core.submitter import Submitter
 import os
 import os.path
+import subprocess
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
@@ -18,7 +19,8 @@ ALGORITHM = "HS256"
 
 
 def get_country(request: Request) -> str:
-    # In future, derive from path/headers if needed; keep signature to match dependencies
+    # In future, derive from path/headers; reference request to satisfy linters
+    _ = request
     return "pt"
 
 
@@ -56,6 +58,22 @@ def jar_status():
         except Exception:
             size=None
     return {"ok": exists, "path": path, "size": size}
+
+
+@router.get("/jar/run-check")
+def jar_run_check():
+    path=os.getenv('FACTEMICLI_JAR_PATH','/opt/factemi/FACTEMICLI.jar')
+    if not os.path.isfile(path):
+        return {"ok": False, "error": f"FACTEMICLI.jar not found at {path}", "path": path}
+    try:
+        # Run a quick invocation; many jars print usage without args
+        out=subprocess.run(['java','-jar',path], capture_output=True, text=True, timeout=5)
+        stdout=(out.stdout or '').strip()
+        stderr=(out.stderr or '').strip()
+        preview=(stdout or stderr)[:2000]
+        return {"ok": out.returncode==0, "returncode": out.returncode, "preview": preview}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Timeout while invoking jar", "returncode": None}
 
 
 @router.post("/secrets/at", response_model=ATSecretOut)
