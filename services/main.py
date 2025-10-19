@@ -363,7 +363,11 @@ UI_HTML = """
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
                         body: JSON.stringify({ object_key: key })
                     });
-                    const j = await r.json();
+                    let j;
+                    try { j = await r.json(); } catch (_) {
+                        const txt = await r.text();
+                        throw new Error('Install failed: ' + (txt ? txt.slice(0, 300) : 'non-JSON error'));
+                    }
                     if (!r.ok) throw new Error(j.detail || 'Install failed');
                     setStatus('JAR installed at ' + j.path + ' (' + (j.size || '?') + ' bytes)');
                     const out = document.getElementById('out'); out.textContent = JSON.stringify(j, null, 2);

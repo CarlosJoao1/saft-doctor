@@ -12,6 +12,11 @@ import os
 import os.path
 import subprocess
 from pathlib import Path
+try:
+    from botocore.exceptions import ClientError  # type: ignore
+except Exception:  # pragma: no cover
+    class ClientError(Exception):
+        pass
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
@@ -143,7 +148,18 @@ async def jar_install(
     Path(os.path.dirname(target_path)).mkdir(parents=True, exist_ok=True)
 
     # Download from bucket to target path
-    storage.client.download_file(storage.bucket, full, target_path)
+    try:
+        storage.client.download_file(storage.bucket, full, target_path)
+    except ClientError as e:
+        code = (e.response.get('Error', {}).get('Code') if hasattr(e, 'response') else None) or 'ClientError'
+        # Map common S3 error codes
+        if code in ('NoSuchKey', '404'):
+            raise HTTPException(status_code=404, detail=f"Object not found: {full}")
+        if code in ('AccessDenied', '403'):
+            raise HTTPException(status_code=403, detail=f"Access denied downloading {full}. Check B2 key permissions (readFiles / s3:GetObject) and bucket policy.")
+        raise HTTPException(status_code=502, detail=f"Storage error ({code}) while downloading {full}.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error while downloading {full}: {str(e)}")
 
     size = None
     try:
