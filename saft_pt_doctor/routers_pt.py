@@ -11,6 +11,7 @@ from core.submitter import Submitter
 import os
 import os.path
 import subprocess
+from pathlib import Path
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
@@ -121,6 +122,35 @@ async def presign_download(
     storage = Storage()
     out = await storage.presign_get(country, body.object_key)
     return out
+
+
+@router.post("/jar/install")
+async def jar_install(
+    body: PresignDownloadIn, request: Request, current=Depends(get_current_user)
+):
+    """Download the JAR from Backblaze (S3-compatible) into FACTEMICLI_JAR_PATH.
+
+    Provide the B2 object key (with or without the country prefix). Example:
+    { "object_key": "pt/tools/FACTEMICLI.jar" }
+    """
+    country = get_country(request)
+    storage = Storage()
+    # Normalize object key to include country prefix
+    full = body.object_key if body.object_key.startswith(f"{country}/") else f"{country}/{body.object_key}"
+
+    # Ensure target directory exists
+    target_path = os.getenv("FACTEMICLI_JAR_PATH", "/opt/factemi/FACTEMICLI.jar")
+    Path(os.path.dirname(target_path)).mkdir(parents=True, exist_ok=True)
+
+    # Download from bucket to target path
+    storage.client.download_file(storage.bucket, full, target_path)
+
+    size = None
+    try:
+        size = os.path.getsize(target_path)
+    except Exception:
+        pass
+    return {"ok": True, "path": target_path, "size": size, "object": full}
 
 
 @router.post("/submit")
