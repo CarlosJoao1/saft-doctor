@@ -8,6 +8,8 @@ from core.security import encrypt, decrypt
 from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadOut, PresignDownloadIn, PresignDownloadOut
 from core.storage import Storage
 from core.submitter import Submitter
+import os
+import os.path
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
@@ -16,6 +18,7 @@ ALGORITHM = "HS256"
 
 
 def get_country(request: Request) -> str:
+    # In future, derive from path/headers if needed; keep signature to match dependencies
     return "pt"
 
 
@@ -40,6 +43,19 @@ async def get_current_user(
 @router.get("/health")
 def health_pt():
     return {"status": "ok", "country": "pt"}
+
+
+@router.get("/jar/status")
+def jar_status():
+    path=os.getenv('FACTEMICLI_JAR_PATH','/opt/factemi/FACTEMICLI.jar')
+    exists=os.path.isfile(path)
+    size=None
+    if exists:
+        try:
+            size=os.path.getsize(path)
+        except Exception:
+            size=None
+    return {"ok": exists, "path": path, "size": size}
 
 
 @router.post("/secrets/at", response_model=ATSecretOut)
