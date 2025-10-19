@@ -10,6 +10,7 @@ from core.auth_utils import create_access_token, hash_password, verify_password
 from core.auth_repo import UsersRepo
 from core.logging_config import setup_logging, get_logger
 from core.middleware import RequestLoggingMiddleware
+from pydantic import BaseModel, Field
 
 def country_from_request(request: Request) -> str:
     parts=[p for p in request.url.path.split('/') if p]
@@ -117,8 +118,12 @@ def health():
     logger.info(f"Health check requested - Environment: {env}")
     return {'status':'ok','env': env}
 
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
 @app.post('/auth/register', tags=['Authentication'], summary="Register User")
-async def register(user: dict, request: Request, db=Depends(get_db)):
+async def register(user: RegisterIn, request: Request, db=Depends(get_db)):
     """
     Registar novo utilizador no sistema.
     
@@ -137,15 +142,15 @@ async def register(user: dict, request: Request, db=Depends(get_db)):
     repo=UsersRepo(db,country)
     
     logger.info("User registration attempt", extra={
-        "username": user.get('username'),
+        "username": user.username,
         "country": country
     })
     
     # 1) Check duplicates (DB)
     try:
-        if await repo.exists(user['username']): 
+        if await repo.exists(user.username): 
             logger.warning("Registration failed - username already exists", extra={
-                "username": user.get('username'),
+                "username": user.username,
                 "country": country
             })
             raise HTTPException(status_code=400, detail='Username already exists')
@@ -157,14 +162,15 @@ async def register(user: dict, request: Request, db=Depends(get_db)):
 
     # 2) Hash password (crypto)
     try:
-        pwd_hash = hash_password(user['password'])
+        pwd_hash = hash_password(user.password)
     except Exception as e:
-        logger.error("Password hashing failed", extra={"error": str(e)})
-        raise HTTPException(status_code=500, detail='Server crypto error while hashing password.')
+        logger.error("Password hashing failed", extra={"error": str(e), "type": e.__class__.__name__})
+        # Return sanitized diagnostic to help operator resolve environment issues
+        raise HTTPException(status_code=500, detail=f"Server crypto error while hashing password: {e.__class__.__name__}")
 
     # 3) Create user (DB)
     try:
-        created=await repo.create(user['username'], pwd_hash)
+        created=await repo.create(user.username, pwd_hash)
         logger.info("User registered successfully", extra={
             "user_id": str(created['_id']),
             "username": created['username'],
@@ -435,6 +441,25 @@ UI_HTML = """
                         const out = document.getElementById('out'); out.textContent = JSON.stringify(j, null, 2);
                     } catch (e) { setStatus('Submit error: ' + e.message); }
                 }
+
+                async function presignDownload() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    const key = (document.getElementById('dl_key').value || '').trim();
+                    if (!key) { setStatus('Provide an object_key.'); return; }
+                    setStatus('Requesting download URL…');
+                    try {
+                        const r = await fetch('/pt/files/presign-download', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                            body: JSON.stringify({ object_key: key })
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Failed to presign download');
+                        document.getElementById('dl_url').textContent = j.url || '(no url)';
+                        const out = document.getElementById('out'); out.textContent = JSON.stringify(j, null, 2);
+                        setStatus('Download URL ready.');
+                    } catch (e) { setStatus('Presign download error: ' + e.message); }
+                }
     </script>
 </head>
 <body>
@@ -493,6 +518,15 @@ UI_HTML = """
                 <div class="row mt">
                     <button class="btn" onclick="submitFile()">Submit</button>
                 </div>
+            </div>
+
+            <div class="card" style="margin-top:1rem;">
+                <h3>Presigned Download (requires login)</h3>
+                <div class="row mt">
+                    <input id="dl_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
+                    <button class="btn" onclick="presignDownload()">Get download URL</button>
+                </div>
+                <div class="mt">URL: <code id="dl_url">(none)</code></div>
             </div>
 
             <p id="status" class="mt"></p>
