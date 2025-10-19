@@ -8,7 +8,7 @@ FROM python:3.11-slim AS base
 
 # Re-run the same steps as services/Dockerfile but from repo root context
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-17-jre-headless curl \
+    && apt-get install -y --no-install-recommends openjdk-21-jre-headless curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 # System deps (Java for FACTEMICLI, curl for diagnostics)
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends openjdk-17-jre-headless curl \
+	&& apt-get install -y --no-install-recommends openjdk-21-jre-headless curl \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Work inside /app (repo root will be copied here)
