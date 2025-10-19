@@ -352,6 +352,24 @@ UI_HTML = """
                 }
             }
 
+            async function installJar() {
+                if (!state.token) { setStatus('Login first.'); return; }
+                const key = (document.getElementById('jar_key').value || '').trim();
+                if (!key) { setStatus('Provide an object_key.'); return; }
+                setStatus('Installing JAR…');
+                try {
+                    const r = await fetch('/pt/jar/install', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                        body: JSON.stringify({ object_key: key })
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.detail || 'Install failed');
+                    setStatus('JAR installed at ' + j.path + ' (' + (j.size || '?') + ' bytes)');
+                    const out = document.getElementById('out'); out.textContent = JSON.stringify(j, null, 2);
+                } catch (e) { setStatus('Install error: ' + e.message); }
+            }
+
                 function setStatus(msg) {
                     const s = document.getElementById('status');
                     s.textContent = msg;
@@ -481,6 +499,14 @@ UI_HTML = """
             <div class="row">
                 <button class="btn" onclick="checkJarStatus()">Check JAR status</button>
                 <button class="btn" onclick="runJarCheck()">Run JAR check</button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:1rem;">
+            <h3>Install JAR from B2 (requires login)</h3>
+            <div class="row mt">
+                <input id="jar_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
+                <button class="btn" onclick="installJar()">Install JAR</button>
             </div>
         </div>
 
