@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 ENV PYTHONPATH=/app
-RUN chmod +x /app/services/entrypoint.sh
+ENV PYTHONUNBUFFERED=1
+# Normalize Windows line endings in entrypoint to avoid /bin/sh^M on Linux
+RUN sed -i 's/\r$//' /app/services/entrypoint.sh && chmod +x /app/services/entrypoint.sh
 EXPOSE 8080
 ENTRYPOINT ["/app/services/entrypoint.sh"]
