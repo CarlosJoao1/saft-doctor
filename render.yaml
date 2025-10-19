@@ -1,0 +1,25 @@
+services:
+- type: web
+  name: saft-doctor
+  env: docker
+  plan: starter
+  autoDeploy: true
+  repo: https://github.com/OWNER/saft-doctor
+  branch: main
+  dockerfilePath: services/Dockerfile
+  buildCommand: ""
+  startCommand: sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"
+  envVars:
+  - { key: APP_ENV, value: prod }
+  - { key: DEFAULT_COUNTRY, value: pt }
+  - { key: SECRET_KEY, sync: false }
+  - { key: MASTER_KEY, sync: false }
+  - { key: MONGO_URI, sync: false }
+  - { key: MONGO_DB, value: saft_doctor }
+  - { key: B2_ENDPOINT, value: https://s3.eu-central-003.backblazeb2.com }
+  - { key: B2_REGION, value: eu-central-003 }
+  - { key: B2_BUCKET, sync: false }
+  - { key: B2_KEY_ID, sync: false }
+  - { key: B2_APP_KEY, sync: false }
+  - { key: FACTEMICLI_JAR_PATH, value: /opt/factemi/FACTEMICLI.jar }
+  - { key: SUBMIT_TIMEOUT_MS, value: "600000" }

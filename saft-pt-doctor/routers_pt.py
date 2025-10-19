@@ -1,0 +1,53 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+import os
+from core.deps import get_db
+from core.auth_repo import UsersRepo
+from core.security import encrypt, decrypt
+from core.models import ATSecretIn, ATSecretOut
+from core.storage import Storage
+from core.submitter import Submitter
+
+router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+SECRET_KEY=os.getenv("SECRET_KEY","change_me"); ALGORITHM="HS256"
+
+def get_country(request: Request) -> str: return "pt"
+
+async def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db=Depends(get_db)):
+    country=get_country(request)
+    try:
+        payload=jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]); username=payload.get("sub")
+        if not username: raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError: raise HTTPException(status_code=401, detail="Invalid token")
+    repo=UsersRepo(db,country); u=await repo.get(username)
+    if not u: raise HTTPException(status_code=401, detail="User not found")
+    return {"username":username,"country":country}
+
+@router.get("/health")
+def health_pt(): return {"status":"ok","country":"pt"}
+
+@router.post("/secrets/at", response_model=ATSecretOut)
+async def save_at_secret(secret: ATSecretIn, request: Request, current=Depends(get_current_user), db=Depends(get_db)):
+    country=get_country(request)
+    repo=UsersRepo(db,country)
+    await repo.save_encrypted_at_credentials(current["username"], encrypt(secret.username), encrypt(secret.password))
+    return ATSecretOut(ok=True)
+
+@router.post("/files/upload")
+async def upload_file(request: Request, file: UploadFile = File(...), current=Depends(get_current_user)):
+    country=get_country(request); storage=Storage()
+    key=await storage.put(country, file.filename, await file.read(), content_type=file.content_type)
+    return {"ok":True,"object":key}
+
+@router.post("/submit")
+async def submit(request: Request, object_key: str, current=Depends(get_current_user), db=Depends(get_db)):
+    country=get_country(request); storage=Storage()
+    local_path=await storage.fetch_to_local(country, object_key)
+    repo=UsersRepo(db,country); u=await repo.get(current["username"])
+    if not u or not u.get("at"): raise HTTPException(status_code=400, detail="AT credentials not set")
+    at_user=decrypt(u["at"]["user"]); at_pass=decrypt(u["at"]["pass"])
+    ok,out=Submitter().submit(local_path, at_user, at_pass)
+    if not ok: raise HTTPException(status_code=502, detail=out)
+    return {"ok":True,"output":out}
