@@ -261,6 +261,8 @@ UI_HTML = """
         .err { color: #991b1b; }
     </style>
     <script>
+            const state = { token: null, objectKey: null, file: null };
+
         async function validate() {
             const fileInput = document.getElementById('file');
             const out = document.getElementById('out');
@@ -305,6 +307,96 @@ UI_HTML = """
                     out.textContent = 'Error: ' + e;
                 }
             }
+
+                function setStatus(msg) {
+                    const s = document.getElementById('status');
+                    s.textContent = msg;
+                }
+
+                async function registerUser() {
+                    const u = document.getElementById('u_user').value.trim();
+                    const p = document.getElementById('u_pass').value;
+                    if (!u || !p) { setStatus('Fill username and password to register.'); return; }
+                    setStatus('Registering…');
+                    try {
+                        const r = await fetch('/auth/register', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: u, password: p })
+                        });
+                        if (!r.ok) { const t=await r.text(); throw new Error(t); }
+                        setStatus('Registered. Now login.');
+                    } catch (e) { setStatus('Register error: ' + e.message); }
+                }
+
+                async function loginUser() {
+                    const u = document.getElementById('l_user').value.trim();
+                    const p = document.getElementById('l_pass').value;
+                    if (!u || !p) { setStatus('Fill username and password to login.'); return; }
+                    setStatus('Logging in…');
+                    try {
+                        const fd = new URLSearchParams(); fd.set('username', u); fd.set('password', p);
+                        const r = await fetch('/auth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Login failed');
+                        state.token = j.access_token; setStatus('Logged in. Token ready.');
+                        document.getElementById('token_status').textContent = 'Authenticated';
+                    } catch (e) { setStatus('Login error: ' + e.message); }
+                }
+
+                async function saveAT() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    const au = document.getElementById('at_user').value.trim();
+                    const ap = document.getElementById('at_pass').value;
+                    if (!au || !ap) { setStatus('Fill AT username and password.'); return; }
+                    setStatus('Saving AT credentials…');
+                    try {
+                        const r = await fetch('/pt/secrets/at', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                            body: JSON.stringify({ username: au, password: ap })
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Failed to save');
+                        setStatus('AT credentials saved (encrypted).');
+                    } catch (e) { setStatus('Save AT error: ' + e.message); }
+                }
+
+                function onFileChange(ev) { state.file = ev.target.files[0] || null; }
+
+                async function presignUpload() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    if (!state.file) { setStatus('Choose a file first.'); return; }
+                    setStatus('Requesting presigned URL…');
+                    try {
+                        const r = await fetch('/pt/files/presign-upload', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                            body: JSON.stringify({ filename: state.file.name, content_type: state.file.type || 'application/octet-stream' })
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Failed to presign');
+                        // PUT to S3 URL
+                        setStatus('Uploading via presigned URL…');
+                        const put = await fetch(j.url, { method: 'PUT', headers: j.headers || {}, body: state.file });
+                        if (!put.ok && put.status !== 200 && put.status !== 201) throw new Error('PUT failed with status ' + put.status);
+                        state.objectKey = j.object; setStatus('Uploaded. object_key=' + state.objectKey);
+                        document.getElementById('object_key').textContent = state.objectKey;
+                    } catch (e) { setStatus('Presign/Upload error: ' + e.message); }
+                }
+
+                async function submitFile() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    if (!state.objectKey) { setStatus('Upload first to get object_key.'); return; }
+                    setStatus('Submitting…');
+                    try {
+                        const r = await fetch('/pt/submit?object_key=' + encodeURIComponent(state.objectKey), {
+                            method: 'POST', headers: { 'Authorization': 'Bearer ' + state.token }
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Submit failed');
+                        setStatus('Submit OK.');
+                        const out = document.getElementById('out'); out.textContent = JSON.stringify(j, null, 2);
+                    } catch (e) { setStatus('Submit error: ' + e.message); }
+                }
     </script>
 </head>
 <body>
@@ -314,7 +406,7 @@ UI_HTML = """
     </header>
     <div class="card">
         <div class="row">
-            <input type="file" id="file" accept=".xml,text/xml" />
+                    <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
             <button class="btn" id="btn" onclick="validate()">Validate</button>
         </div>
         <div class="mt">
@@ -328,6 +420,44 @@ UI_HTML = """
                 <button class="btn" onclick="runJarCheck()">Run JAR check</button>
             </div>
         </div>
+
+            <div class="card" style="margin-top:1rem;">
+                <h3>Auth</h3>
+                <div class="row mt">
+                    <input placeholder="Register: username" id="u_user" />
+                    <input placeholder="Register: password" id="u_pass" type="password" />
+                    <button class="btn" onclick="registerUser()">Register</button>
+                </div>
+                <div class="row mt">
+                    <input placeholder="Login: username" id="l_user" />
+                    <input placeholder="Login: password" id="l_pass" type="password" />
+                    <button class="btn" onclick="loginUser()">Login</button>
+                    <span id="token_status" class="ok" style="margin-left:.5rem;">Not authenticated</span>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:1rem;">
+                <h3>AT Secrets (requires login)</h3>
+                <p>AT credentials are saved encrypted on the server only after login.</p>
+                <div class="row mt">
+                    <input placeholder="AT username" id="at_user" />
+                    <input placeholder="AT password" id="at_pass" type="password" />
+                    <button class="btn" onclick="saveAT()">Save AT</button>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:1rem;">
+                <h3>Upload & Submit (requires login)</h3>
+                <div class="row mt">
+                    <button class="btn" onclick="presignUpload()">Upload via Presign</button>
+                    <span>object_key: <code id="object_key">(none)</code></span>
+                </div>
+                <div class="row mt">
+                    <button class="btn" onclick="submitFile()">Submit</button>
+                </div>
+            </div>
+
+            <p id="status" class="mt"></p>
 </body>
 </html>
 """
