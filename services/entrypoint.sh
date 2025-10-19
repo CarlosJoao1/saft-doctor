@@ -7,10 +7,21 @@ PORT=${PORT:-8080}
 
 echo "Starting SAFT Doctor on port $PORT..."
 echo "Python version: $(python -V)"
-echo "Uvicorn version: $(python -c 'import uvicorn,sys;print(uvicorn.__version__)' 2>/dev/null || echo n/a)"
+echo "Uvicorn version: $(python - <<'PY'
+import sys
+try:
+	import uvicorn
+	print(getattr(uvicorn, '__version__', 'n/a'))
+except Exception as e:
+	print(f"n/a ({e})")
+PY
+)"
 echo "PYTHONPATH: ${PYTHONPATH}"
 echo "Working dir: $(pwd)"
-ls -la
+echo "Listing /app:"
+ls -la /app || true
+echo "Listing /app/services:"
+ls -la /app/services || true
 
 # Start uvicorn (module under services.main since we set PYTHONPATH=/app)
-exec uvicorn services.main:app --host 0.0.0.0 --port "$PORT"
+exec python -m uvicorn services.main:app --host 0.0.0.0 --port "$PORT"

@@ -16,9 +16,10 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app
 
 # Ensure Python can import top-level packages (core, saft_pt_doctor)
-ENV PYTHONPATH=/app:${PYTHONPATH}
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Entrypoint
-RUN chmod +x /app/services/entrypoint.sh
+RUN sed -i 's/\r$//' /app/services/entrypoint.sh && chmod +x /app/services/entrypoint.sh
 EXPOSE 8080
 ENTRYPOINT ["/app/services/entrypoint.sh"]
