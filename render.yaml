@@ -6,8 +6,8 @@ services:
   autoDeploy: true
   repo: https://github.com/CarlosJoao1/saft-doctor
   branch: main
-  dockerfilePath: ./Dockerfile
-  dockerContext: ./services
+  dockerfilePath: ./services/Dockerfile
+  dockerContext: .
   envVars:
   - { key: APP_ENV, value: prod }
   - { key: DEFAULT_COUNTRY, value: pt }
