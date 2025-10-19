@@ -62,6 +62,35 @@ app.add_middleware(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 
+@app.get('/', tags=['Health'], summary='API Root')
+def root():
+    """Root endpoint with quick links and status."""
+    return {
+        'name': 'SAFT Doctor API',
+        'status': 'ok',
+        'env': os.getenv('APP_ENV','dev'),
+        'docs': '/docs',
+        'openapi': '/openapi.json',
+        'health': '/health',
+        'countries': ['pt']
+    }
+
+@app.get('/pt', tags=['Portugal'], summary='Portugal Root')
+def pt_root():
+    """Country root for Portugal with quick links."""
+    return {
+        'country': 'pt',
+        'health': '/pt/health',
+        'auth': {
+            'register': '/auth/register',
+            'token': '/auth/token'
+        },
+        'files': {
+            'upload': '/pt/files/upload'
+        },
+        'submit': '/pt/submit'
+    }
+
 @app.get('/health', tags=['Health'], summary="Health Check")
 def health():
     """
