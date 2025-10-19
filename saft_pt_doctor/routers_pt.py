@@ -471,6 +471,15 @@ async def validate_with_jar(
     file_flag = os.getenv('FACTEMICLI_VALIDATE_FILE_FLAG', '-f')
     transcript['op'] = op
     cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op',op, file_flag, saft_path]
+    # Prepare masked command early so that even failures/timeouts can show it
+    safe_cmd = list(cmd)
+    try:
+        for i, part in enumerate(safe_cmd):
+            if part == selected_pass:
+                safe_cmd[i] = '***'
+    except Exception:
+        pass
+    transcript['cmd_masked'] = safe_cmd
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -482,17 +491,26 @@ async def validate_with_jar(
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
         except asyncio.TimeoutError:
             proc.kill()
-            raise HTTPException(status_code=504, detail="Validation timed out")
+            # Return a structured timeout result instead of raising, so the UI can show the command
+            limit = 10000 if not full else None
+            def trunc(s: str) -> str:
+                if s is None: return ''
+                if limit is None: return s
+                return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
+            return {
+                'ok': False,
+                'error': 'Validation timed out',
+                'timeout': True,
+                'returncode': None,
+                'stdout': '',
+                'stderr': '',
+                'args': {'nif':nif,'year':year,'month':month},
+                'cmd_masked': safe_cmd,
+                'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None,
+                'jar_path': jar_path,
+                'transcript': transcript
+            }
         ok = (proc.returncode == 0)
-        # Prepare masked command for diagnostics
-        safe_cmd = list(cmd)
-        try:
-            for i, part in enumerate(safe_cmd):
-                if part == selected_pass:
-                    safe_cmd[i] = '***'
-        except Exception:
-            pass
-        transcript['cmd_masked'] = safe_cmd
         # Truncation
         limit = 10000 if not full else None
         def trunc(s: str) -> str:

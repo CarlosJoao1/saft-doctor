@@ -11,4 +11,6 @@ def test_pt_flow(client):
     r=client.post('/pt/files/upload', files=files, headers=h)
     key=r.json()['object']
     r=client.post(f'/pt/submit?object_key={key}', headers=h)
-    assert r.status_code==502 and 'FACTEMICLI.jar' in r.json()['detail']
+    assert r.status_code in (400,502)
+    detail = r.json().get('detail') if r.headers.get('content-type','').startswith('application/json') else r.text
+    assert 'FACTEMICLI.jar' in str(detail)

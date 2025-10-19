@@ -283,6 +283,29 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
 from saft_pt_doctor.routers_pt import router as router_pt
 app.include_router(router_pt, prefix='/pt')
 
+@app.on_event('startup')
+async def _bootstrap_default_user():
+    """Optionally bootstrap a default user if BOOTSTRAP_USER/PASS are set.
+
+    This helps local/dev environments log in without manual registration.
+    """
+    u = os.getenv('BOOTSTRAP_USER')
+    p = os.getenv('BOOTSTRAP_PASS')
+    country = os.getenv('DEFAULT_COUNTRY','pt')
+    if not (u and p):
+        return
+    try:
+        db = get_db()
+        repo = UsersRepo(db, country)
+        exists = await repo.exists(u)
+        if not exists:
+            await repo.create(u, hash_password(p))
+            logger.info("Bootstrap user created", extra={"username": u, "country": country})
+        else:
+            logger.info("Bootstrap user exists", extra={"username": u, "country": country})
+    except Exception as e:
+        logger.warning("Bootstrap user failed", extra={"error": str(e)})
+
 # --- Simple UX for SAFT validation ---
 UI_HTML = """
 <!doctype html>
@@ -309,9 +332,18 @@ UI_HTML = """
         .tabpanel { display: none; }
         .tabpanel.active { display: block; }
         .note { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: .8rem; border-radius: 8px; }
+        .log-header { display:flex; align-items:center; justify-content: space-between; }
+        .log-actions { display:flex; gap:.5rem; }
     </style>
     <script>
             const state = { token: null, objectKey: null, file: null };
+            function logLine(msg) {
+                const el = document.getElementById('log');
+                const ts = new Date().toISOString();
+                el.textContent += `[${ts}] ${msg}\n`;
+                el.scrollTop = el.scrollHeight;
+            }
+            function clearLog() { const el = document.getElementById('log'); el.textContent=''; }
 
         function showTab(id) {
             for (const el of document.querySelectorAll('.tab')) el.classList.remove('active');
@@ -346,18 +378,36 @@ UI_HTML = """
                 if (!state.token) { setStatus('Login first.'); return; }
                 const fileInput = document.getElementById('file');
                 const out = document.getElementById('out');
+                const cmdEl = document.getElementById('cmd_mask');
                 if (!fileInput.files.length) { setStatus('Choose a SAFT XML file'); return; }
                 setStatus('Validating via FACTEMICLI.jar…');
+                logLine('Validate with JAR clicked. Preparing upload…');
                 const f = fileInput.files[0];
                 const fd = new FormData(); fd.append('file', f);
                 try {
-                    const r = await fetch('/pt/validate-jar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + state.token }, body: fd });
-                    const txt = await r.text(); let data=null; try { data = txt ? JSON.parse(txt) : null; } catch(_){}
-                    if (!r.ok) throw new Error((data && data.detail) || (txt ? txt.slice(0,300) : 'Validation failed'));
-                    out.textContent = data ? JSON.stringify(data, null, 2) : (txt || 'OK');
-                    setStatus('JAR validation done.');
+                    const r = await fetch('/pt/validate-jar?full=1', { method: 'POST', headers: { 'Authorization': 'Bearer ' + state.token }, body: fd });
+                    const txt = await r.text();
+                    let data=null; try { data = txt ? JSON.parse(txt) : null; } catch(_){ }
+                    // Always show body even on errors
+                    out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(no body)');
+                    if (data && data.cmd_masked && Array.isArray(data.cmd_masked)) {
+                        cmdEl.textContent = data.cmd_masked.join(' ');
+                        logLine('Command (masked): ' + data.cmd_masked.join(' '));
+                        if (typeof data.returncode !== 'undefined' && data.returncode !== null) {
+                            logLine('Return code: ' + data.returncode + (data.ok === false ? ' (error)' : ''));
+                        }
+                        if (data.stderr) {
+                            const preview = (data.stderr.length > 400 ? data.stderr.slice(0, 400) + '…' : data.stderr);
+                            if (preview.trim()) logLine('Stderr preview: ' + preview.replace(/\n/g,' | '));
+                        }
+                    } else {
+                        cmdEl.textContent = '(n/a)';
+                        logLine('No command returned by API.');
+                    }
+                    setStatus(r.ok ? 'JAR validation done.' : ('JAR validation HTTP ' + r.status));
                 } catch (e) {
                     setStatus('JAR validation error: ' + e.message);
+                    logLine('Error during JAR validation: ' + e.message);
                 }
             }
 
@@ -454,6 +504,12 @@ UI_HTML = """
                         state.token = j.access_token; setStatus('Logged in. Token ready.');
                         document.getElementById('token_status').textContent = 'Authenticated';
                     } catch (e) { setStatus('Login error: ' + e.message); }
+                }
+
+                async function loginDev() {
+                    document.getElementById('l_user').value = 'dev';
+                    document.getElementById('l_pass').value = 'dev';
+                    await loginUser();
                 }
 
                 async function saveAT() {
@@ -632,9 +688,20 @@ UI_HTML = """
             <button class="btn" onclick="validateWithJar()">Validate with JAR</button>
         </div>
         <div class="mt">
+            <div>Comando (mascarado): <code id="cmd_mask">(n/a)</code></div>
             <pre id="out"></pre>
         </div>
     </div>
+
+        <div class="card" style="margin-top:1rem;">
+            <div class="log-header">
+                <h3 style="margin:0;">Log</h3>
+                <div class="log-actions">
+                    <button class="btn" onclick="clearLog()">Clear log</button>
+                </div>
+            </div>
+            <pre id="log" style="min-height:160px;" aria-label="Execution log"></pre>
+        </div>
 
         <div class="card" style="margin-top:1rem;">
             <div class="row">
@@ -655,6 +722,7 @@ UI_HTML = """
                     <input placeholder="Login: username" id="l_user" />
                     <input placeholder="Login: password" id="l_pass" type="password" />
                     <button class="btn" onclick="loginUser()">Login</button>
+                    <button class="btn" onclick="loginDev()" title="Quick dev login">Login dev/dev</button>
                     <span id="token_status" class="ok" style="margin-left:.5rem;">Not authenticated</span>
                 </div>
             </div>
@@ -666,6 +734,7 @@ UI_HTML = """
                     <input placeholder="AT username" id="at_user" />
                     <input placeholder="AT password" id="at_pass" type="password" />
                     <button class="btn" onclick="saveAT()">Save AT</button>
+                    <button class="btn" onclick="(async ()=>{ document.getElementById('at_user').value='teste'; document.getElementById('at_pass').value='segredo'; await saveAT(); })()">Guardar AT de teste</button>
                 </div>
             </div>
 
