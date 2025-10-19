@@ -303,9 +303,23 @@ UI_HTML = """
         .ok { color: #065f46; }
         .warn { color: #92400e; }
         .err { color: #991b1b; }
+        .tabs { display: flex; gap: .5rem; margin-bottom: 1rem; }
+        .tab { padding: .5rem .8rem; border: 1px solid #e5e7eb; border-bottom: none; border-radius: 6px 6px 0 0; background: #f9fafb; cursor: pointer; }
+        .tab.active { background: white; font-weight: 600; }
+        .tabpanel { display: none; }
+        .tabpanel.active { display: block; }
+        .note { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: .8rem; border-radius: 8px; }
     </style>
     <script>
             const state = { token: null, objectKey: null, file: null };
+
+        function showTab(id) {
+            for (const el of document.querySelectorAll('.tab')) el.classList.remove('active');
+            for (const el of document.querySelectorAll('.tabpanel')) el.classList.remove('active');
+            const btn = document.querySelector(`[data-tab="${id}"]`);
+            const panel = document.getElementById(`panel-${id}`);
+            if (btn && panel) { btn.classList.add('active'); panel.classList.add('active'); }
+        }
 
         async function validate() {
             const fileInput = document.getElementById('file');
@@ -491,6 +505,12 @@ UI_HTML = """
         <h1>SAFT Doctor • Validator</h1>
         <p>Upload a SAFT XML to validate basic structure and header fields.</p>
     </header>
+    <div class="tabs">
+        <div class="tab active" data-tab="app" onclick="showTab('app')">Aplicação</div>
+        <div class="tab" data-tab="config" onclick="showTab('config')">Configuração</div>
+    </div>
+
+    <div id="panel-app" class="tabpanel active">
     <div class="card">
         <div class="row">
                     <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
@@ -505,14 +525,6 @@ UI_HTML = """
             <div class="row">
                 <button class="btn" onclick="checkJarStatus()">Check JAR status</button>
                 <button class="btn" onclick="runJarCheck()">Run JAR check</button>
-            </div>
-        </div>
-
-        <div class="card" style="margin-top:1rem;">
-            <h3>Install JAR from B2 (requires login)</h3>
-            <div class="row mt">
-                <input id="jar_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
-                <button class="btn" onclick="installJar()">Install JAR</button>
             </div>
         </div>
 
@@ -552,14 +564,47 @@ UI_HTML = """
                 </div>
             </div>
 
-            <div class="card" style="margin-top:1rem;">
-                <h3>Presigned Download (requires login)</h3>
-                <div class="row mt">
-                    <input id="dl_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
-                    <button class="btn" onclick="presignDownload()">Get download URL</button>
-                </div>
-                <div class="mt">URL: <code id="dl_url">(none)</code></div>
+    </div> <!-- end panel-app -->
+
+    <div id="panel-config" class="tabpanel">
+        <div class="card">
+            <h3>Instalar FACTEMICLI.jar (Configuração)</h3>
+            <p class="note">
+                Como instalar o ficheiro FACTEMICLI.jar no servidor:
+            </p>
+            <ol class="mt">
+                <li>Carrega o JAR para o teu bucket Backblaze B2 <b>saftdoctor</b> sob o prefixo <code>pt/tools/FACTEMICLI.jar</code> (recomendado um único bucket com prefixos por país).</li>
+                <li>Garante que a tua Application Key tem permissões de leitura no bucket: <b>readFiles</b> / <b>s3:GetObject</b> (e <b>putObject</b> se fores usar uploads).</li>
+                <li>Configura as variáveis no Render (Serviço → Settings → Environment):
+                    <ul>
+                        <li><code>B2_BUCKET=saftdoctor</code></li>
+                        <li><code>B2_REGION=eu-central-003</code></li>
+                        <li><code>B2_ENDPOINT=https://s3.eu-central-003.backblazeb2.com</code></li>
+                        <li><code>B2_KEY_ID</code> e <code>B2_APP_KEY</code> (com as permissões acima)</li>
+                        <li><code>FACTEMICLI_JAR_PATH</code> (ex.: <code>/opt/factemi/FACTEMICLI.jar</code>)</li>
+                    </ul>
+                </li>
+                <li>(Recomendado) Usa um <b>Persistent Disk</b> no Render montado em <code>/opt/factemi</code>, para o JAR persistir entre deployments.</li>
+                <li>Depois de autenticado nesta página, usa o botão <b>Install JAR</b> abaixo para transferir do B2 diretamente para o caminho configurado.</li>
+                <li>Evita usar <code>curl -L</code> com URLs presignados S3 (o redirect quebra a assinatura). Se precisares de um link temporário, usa "Presigned Download" nesta aba.</li>
+                <li>Para atualizar o JAR no futuro, substitui o ficheiro no B2 (mesmo <code>object_key</code>) e clica novamente em <b>Install JAR</b>.</li>
+            </ol>
+            <div class="row mt">
+                <input id="jar_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
+                <button class="btn" onclick="installJar()">Install JAR</button>
             </div>
+        </div>
+
+        <div class="card" style="margin-top:1rem;">
+            <h3>Presigned Download (opcional)</h3>
+            <p>Podes gerar um URL temporário para descarregar o ficheiro diretamente no browser.</p>
+            <div class="row mt">
+                <input id="dl_key" placeholder="object_key (e.g. pt/tools/FACTEMICLI.jar)" value="pt/tools/FACTEMICLI.jar" />
+                <button class="btn" onclick="presignDownload()">Get download URL</button>
+            </div>
+            <div class="mt">URL: <code id="dl_url">(none)</code></div>
+        </div>
+    </div>
 
             <p id="status" class="mt"></p>
 </body>
