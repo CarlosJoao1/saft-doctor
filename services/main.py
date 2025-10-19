@@ -1,5 +1,7 @@
 import os
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -224,3 +226,81 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
 
 from saft_pt_doctor.routers_pt import router as router_pt
 app.include_router(router_pt, prefix='/pt')
+
+# --- Simple UX for SAFT validation ---
+UI_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SAFT Doctor • Validator</title>
+    <style>
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+        header { margin-bottom: 1rem; }
+        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; max-width: 760px; }
+        .row { display: flex; gap: 1rem; align-items: center; }
+        .mt { margin-top: 1rem; }
+        .btn { background: #111827; color: white; border: 0; padding: .6rem 1rem; border-radius: 6px; cursor: pointer; }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        pre { background: #0b1020; color: #e5e7eb; padding: 1rem; border-radius: 8px; overflow:auto; }
+        .ok { color: #065f46; }
+        .warn { color: #92400e; }
+        .err { color: #991b1b; }
+    </style>
+    <script>
+        async function validate() {
+            const fileInput = document.getElementById('file');
+            const out = document.getElementById('out');
+            const btn = document.getElementById('btn');
+            out.textContent = '';
+            if (!fileInput.files.length) { out.textContent = 'Choose a SAFT XML file'; return; }
+            const f = fileInput.files[0];
+            const fd = new FormData();
+            fd.append('file', f);
+            btn.disabled = true; btn.textContent = 'Validating…';
+            try {
+                const res = await fetch('/ui/validate', { method: 'POST', body: fd });
+                const data = await res.json();
+                out.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                out.textContent = 'Error: ' + e;
+            } finally {
+                btn.disabled = false; btn.textContent = 'Validate';
+            }
+        }
+    </script>
+</head>
+<body>
+    <header>
+        <h1>SAFT Doctor • Validator</h1>
+        <p>Upload a SAFT XML to validate basic structure and header fields.</p>
+    </header>
+    <div class="card">
+        <div class="row">
+            <input type="file" id="file" accept=".xml,text/xml" />
+            <button class="btn" id="btn" onclick="validate()">Validate</button>
+        </div>
+        <div class="mt">
+            <pre id="out"></pre>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+@app.get('/ui', response_class=HTMLResponse, tags=['UI'])
+def ui_page():
+        return HTMLResponse(content=UI_HTML)
+
+@app.post('/ui/validate', tags=['UI'])
+async def ui_validate(file: UploadFile = File(...)):
+        from core.saft_validator import parse_xml, validate_saft
+        data = await file.read()
+        try:
+                root = parse_xml(data)
+                issues, summary = validate_saft(root)
+                status = 'ok' if not any(i['level'] == 'error' for i in issues) else 'errors'
+                return JSONResponse({ 'status': status, 'summary': summary, 'issues': issues })
+        except Exception as e:
+                return JSONResponse({ 'status': 'error', 'message': str(e) }, status_code=400)
