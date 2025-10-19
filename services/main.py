@@ -559,6 +559,58 @@ UI_HTML = """
                         loadCredsStatus();
                     } catch (e) { setStatus('Save AT error: ' + e.message); }
                 }
+
+                async function analyzeAndSave() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    const fileInput = document.getElementById('file');
+                    if (!fileInput.files.length) { setStatus('Choose a SAFT XML file'); return; }
+                    setStatus('Analyzing…');
+                    try {
+                        const f = fileInput.files[0];
+                        const fd = new FormData(); fd.append('file', f);
+                        const r = await fetch('/pt/analyze', { method: 'POST', headers: { 'Authorization': 'Bearer ' + state.token }, body: fd });
+                        const txt = await r.text();
+                        let data = null; try { data = txt ? JSON.parse(txt) : null; } catch(_){}
+                        if (!r.ok) throw new Error((data && data.detail) || (txt ? txt.slice(0,300) : 'Analyze failed'));
+                        const out = document.getElementById('out'); out.textContent = JSON.stringify(data, null, 2);
+                        if (data.object_key) { state.objectKey = data.object_key; document.getElementById('object_key').textContent = state.objectKey; }
+                        setStatus('Analysis saved.');
+                    } catch (e) {
+                        setStatus('Analyze error: ' + e.message);
+                    }
+                }
+
+                async function saveNifEntry() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    const ident = (document.getElementById('nif_ident').value || '').trim();
+                    const pass = document.getElementById('nif_pass').value;
+                    if (!ident || !pass) { setStatus('Preenche NIF e senha.'); return; }
+                    setStatus('A guardar senha para NIF ' + ident + '…');
+                    try {
+                        const r = await fetch('/pt/secrets/at/entries', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+                            body: JSON.stringify({ ident, password: pass })
+                        });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Falha ao guardar');
+                        setStatus('Senha guardada para NIF ' + ident + '.');
+                        await loadNifEntries();
+                    } catch (e) { setStatus('Erro a guardar NIF: ' + e.message); }
+                }
+
+                async function loadNifEntries() {
+                    if (!state.token) { setStatus('Login first.'); return; }
+                    setStatus('A carregar NIFs…');
+                    try {
+                        const r = await fetch('/pt/secrets/at/entries', { headers: { 'Authorization': 'Bearer ' + state.token } });
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.detail || 'Falha ao listar');
+                        const out = document.getElementById('nif_list');
+                        out.textContent = JSON.stringify(j.items || [], null, 2);
+                        setStatus('NIFs carregados.');
+                    } catch (e) { setStatus('Erro a listar NIFs: ' + e.message); }
+                }
     </script>
 </head>
 <body>
@@ -625,6 +677,7 @@ UI_HTML = """
                 </div>
                 <div class="row mt">
                     <button class="btn" onclick="submitFile()">Submit</button>
+                    <button class="btn" onclick="analyzeAndSave()">Analyze & save</button>
                 </div>
             </div>
 
@@ -705,6 +758,21 @@ UI_HTML = """
                 <input placeholder="AT username" id="at_user2" />
                 <input placeholder="AT password" id="at_pass2" type="password" />
                 <button class="btn" onclick="saveAT2()">Guardar</button>
+            </div>
+        </div>
+        <div class="card" style="margin-top:1rem;">
+            <h3>Senhas por NIF (recomendado)</h3>
+            <p>Guarda a senha AT associada a cada NIF. A validação/submissão escolhe automaticamente pela NIF do XML.</p>
+            <div class="row mt">
+                <input placeholder="NIF (ident)" id="nif_ident" />
+                <input placeholder="Senha AT" id="nif_pass" type="password" />
+                <button class="btn" onclick="saveNifEntry()">Guardar NIF</button>
+            </div>
+            <div class="mt">
+                <button class="btn" onclick="loadNifEntries()">Listar NIFs</button>
+            </div>
+            <div class="mt">
+                <pre id="nif_list">(vazio)</pre>
             </div>
         </div>
     </div>

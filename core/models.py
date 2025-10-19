@@ -1,8 +1,20 @@
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 class ATSecretIn(BaseModel): username:str; password:str
 class ATSecretOut(BaseModel): ok: bool
+
+class ATEntryIn(BaseModel):
+	ident: str  # e.g., NIF
+	password: str
+
+class ATEntryOut(BaseModel):
+	ident: str
+	updated_at: Optional[str] = None
+
+class ATEntryListOut(BaseModel):
+	ok: bool
+	items: List[ATEntryOut]
 
 class PresignUploadIn(BaseModel):
 	filename: str

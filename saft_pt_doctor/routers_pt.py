@@ -3,11 +3,13 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 import os
 from core.deps import get_db
+USER_NOT_FOUND = "User not found"
 from core.auth_repo import UsersRepo
 from core.security import encrypt, decrypt
-from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadOut, PresignDownloadIn, PresignDownloadOut
+from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadOut, PresignDownloadIn, PresignDownloadOut, ATEntryIn, ATEntryOut, ATEntryListOut
 from core.storage import Storage
 from core.submitter import Submitter
+from core.analysis_repo import AnalysisRepo
 import os
 import os.path
 import subprocess
@@ -23,6 +25,7 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 SECRET_KEY = os.getenv("SECRET_KEY", "change_me")
 ALGORITHM = "HS256"
+USER_NOT_FOUND = "User not found"
 
 
 def get_country(request: Request) -> str:
@@ -50,7 +53,7 @@ async def get_current_user(
     repo = UsersRepo(db, country)
     u = await repo.get(username)
     if not u:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
     return {"username": username, "country": country}
 
 
@@ -117,6 +120,85 @@ async def save_at_secret(
     return ATSecretOut(ok=True)
 
 
+@router.post('/secrets/at/entries', response_model=ATSecretOut)
+async def upsert_at_entry(
+    entry: ATEntryIn,
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Save or update a credential entry keyed by ident (e.g., NIF)."""
+    if not entry.ident or not entry.password:
+        raise HTTPException(status_code=400, detail='ident and password are required')
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    await repo.upsert_at_entry(current['username'], encrypt(entry.ident), encrypt(entry.password))
+    return ATSecretOut(ok=True)
+
+
+@router.get('/secrets/at/entries', response_model=ATEntryListOut)
+async def list_at_entries(
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """List credential entries (ident masked) for the current user."""
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    entries = await repo.get_at_entries(current['username'])
+    items = []
+    for enc_ident, meta in entries.items():
+        ident = None
+        try:
+            ident = decrypt(enc_ident)
+        except Exception:
+            pass
+        if not ident:
+            continue
+        masked = (ident[0] + '***') if len(ident) <= 5 else (ident[:3] + '****' + ident[-2:])
+        updated_val = meta.get('updated_at') if isinstance(meta, dict) else None
+        updated_str = None
+        if hasattr(updated_val, 'isoformat'):
+            try:
+                updated_str = updated_val.isoformat()
+            except Exception:
+                updated_str = None
+        elif isinstance(updated_val, str):
+            updated_str = updated_val
+        items.append(ATEntryOut(ident=masked, updated_at=updated_str))
+    return ATEntryListOut(ok=True, items=items)
+
+
+async def _select_at_password(repo: UsersRepo, username: str, nif: str) -> str | None:
+    """Select the AT password for given nif from at_entries; fallback to legacy single 'at'."""
+    from core.security import decrypt
+    u = await repo.get(username)
+    if not u:
+        return None
+    # Try multi-entry first
+    try:
+        entries = await repo.get_at_entries(username)
+        for enc_ident, meta in entries.items():
+            try:
+                ident_plain = decrypt(enc_ident)
+            except Exception:
+                ident_plain = None
+            if ident_plain and ident_plain == nif:
+                try:
+                    return decrypt(meta.get('pass')) if meta and meta.get('pass') else None
+                except Exception:
+                    return None
+    except Exception:
+        pass
+    # Fallback
+    try:
+        if u.get('at') and u['at'].get('pass'):
+            return decrypt(u['at']['pass'])
+    except Exception:
+        return None
+    return None
+
+
 @router.get('/secrets/at/status')
 async def at_secret_status(request: Request, current=Depends(get_current_user), db=Depends(get_db)):
     country = get_country(request)
@@ -155,6 +237,71 @@ async def upload_file(
         country, file.filename, await file.read(), content_type=file.content_type
     )
     return {"ok": True, "object": key}
+
+
+@router.post('/analyze')
+async def analyze_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Analyze an uploaded SAFT XML, persist the issues, and save correct files to storage.
+
+    - Parses XML safely. If invalid, status='invalid-xml'.
+    - Runs basic validation; status='ok' if no errors, else 'errors'.
+    - If status='ok', saves file to B2 and records object_key.
+    - Persists a record in the analyses repository and returns it.
+    """
+    country = get_country(request)
+    repo = AnalysisRepo(db, country)
+    from core.saft_validator import parse_xml, validate_saft
+    data = await file.read()
+    issues = []
+    summary = {}
+    status = 'ok'
+    try:
+        root = parse_xml(data)
+        issues, summary = validate_saft(root)
+        status = 'ok' if not any(i.get('level') == 'error' for i in issues) else 'errors'
+    except Exception as e:
+        status = 'invalid-xml'
+        issues = [{ 'level': 'error', 'code': 'XML_INVALID', 'message': str(e), 'path': '/' }]
+
+    object_key = None
+    if status == 'ok':
+        storage = Storage()
+        object_key = await storage.put(country, file.filename, data, content_type=file.content_type)
+
+    record = await repo.create(
+        current['username'],
+        {
+            'filename': file.filename,
+            'content_type': file.content_type,
+            'status': status,
+            'issues': issues,
+            'summary': summary,
+            'object_key': object_key,
+            'country': country,
+        }
+    )
+    # Convert ObjectId for response if needed
+    record['_id'] = str(record['_id'])
+    return record
+
+
+@router.get('/analyses')
+async def list_analyses(
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    country = get_country(request)
+    repo = AnalysisRepo(db, country)
+    items = await repo.list_for_user(current['username'])
+    for it in items:
+        it['_id'] = str(it['_id'])
+    return { 'items': items }
 
 
 @router.post("/files/presign-upload", response_model=PresignUploadOut)
@@ -252,13 +399,15 @@ async def validate_with_jar(
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing fields in XML for CLI: {', '.join(missing)}")
 
-    # Get AT password
+    # Get AT password for this ident (prefer multi-entry by ident=NIF; fallback to legacy single 'at')
     country = get_country(request)
     repo = UsersRepo(db, country)
     u = await repo.get(current["username"])
-    if not u or not u.get("at"):
-        raise HTTPException(status_code=400, detail="AT credentials not set")
-    at_pass = decrypt(u["at"]["pass"])
+    if not u:
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
+    selected_pass = await _select_at_password(repo, current['username'], nif)
+    if not selected_pass:
+        raise HTTPException(status_code=400, detail="AT password not found for this NIF. Save it in Credenciais (ident=NIF).")
 
     # Build command
     jar_path = _jar_path()
@@ -266,7 +415,7 @@ async def validate_with_jar(
         raise HTTPException(status_code=400, detail=f"FACTEMICLI.jar not found at {jar_path}")
     # Some tools expect @ before the path to indicate file input; keep close to provided spec
     input_arg = '@' + saft_path
-    cmd = ['java','-jar',jar_path,'-n',nif,'-p',at_pass,'-a',year,'-m',month,'-op','enviar','-i',input_arg]
+    cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op','enviar','-i',input_arg]
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -282,7 +431,23 @@ async def validate_with_jar(
         out_text = (stdout.decode() if stdout else '') + (('\n' + stderr.decode()) if stderr else '')
         ok = (proc.returncode == 0)
         preview = out_text[:4000]
-        return { 'ok': ok, 'returncode': proc.returncode, 'output': preview, 'args': {'nif':nif,'year':year,'month':month}, 'cmd': cmd if os.getenv('EXPOSE_CMD','0')=='1' else None }
+        # Prepare masked command for diagnostics
+        safe_cmd = list(cmd)
+        try:
+            for i, part in enumerate(safe_cmd):
+                if part == selected_pass:
+                    safe_cmd[i] = '***'
+        except Exception:
+            pass
+        return {
+            'ok': ok,
+            'returncode': proc.returncode,
+            'output': preview,
+            'stdout': (stdout.decode() if stdout else '')[:4000],
+            'stderr': (stderr.decode() if stderr else '')[:4000],
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -301,16 +466,74 @@ async def validate_with_jar(
 async def submit(
     request: Request, object_key: str, current=Depends(get_current_user), db=Depends(get_db)
 ):
+    """Submit a previously uploaded SAFT using FACTEMICLI.jar, selecting password by NIF from XML.
+
+    - Fetches the object to local disk
+    - Parses XML to extract NIF/year/month
+    - Looks up matching AT password in at_entries by ident=NIF; falls back to legacy single 'at'
+    - Invokes the JAR and returns diagnostics (masked command, stdout/stderr)
+    """
+    from core.saft_validator import parse_xml, extract_cli_params
+    from core.security import decrypt
     country = get_country(request)
     storage = Storage()
     local_path = await storage.fetch_to_local(country, object_key)
+    # Parse XML to get NIF
+    try:
+        data = await asyncio.to_thread(Path(local_path).read_bytes)
+        root = parse_xml(data)
+        params = extract_cli_params(root)
+        nif = params.get('nif'); year = params.get('year'); month = params.get('month')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
+    if not (nif and year and month):
+        raise HTTPException(status_code=400, detail="Missing nif/year/month in XML")
+
     repo = UsersRepo(db, country)
     u = await repo.get(current["username"])
-    if not u or not u.get("at"):
-        raise HTTPException(status_code=400, detail="AT credentials not set")
-    at_user = decrypt(u["at"]["user"])
-    at_pass = decrypt(u["at"]["pass"])
-    ok, out = Submitter().submit(local_path, at_user, at_pass)
-    if not ok:
-        raise HTTPException(status_code=502, detail=out)
-    return {"ok": True, "output": out}
+    if not u:
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
+    selected_pass = await _select_at_password(repo, current['username'], nif)
+    if not selected_pass:
+        raise HTTPException(status_code=400, detail=f"AT password not found for NIF {nif}. Save it under Credenciais.")
+
+    # Build command similar to validate-jar
+    jar_path = _jar_path()
+    if not os.path.isfile(jar_path):
+        raise HTTPException(status_code=400, detail=f"FACTEMICLI.jar not found at {jar_path}")
+    input_arg = '@' + local_path
+    cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op','enviar','-i',input_arg]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise HTTPException(status_code=504, detail="Submission timed out")
+        out_text = (stdout.decode() if stdout else '') + (('\n' + stderr.decode()) if stderr else '')
+        ok = (proc.returncode == 0)
+        safe_cmd = list(cmd)
+        try:
+            for i, part in enumerate(safe_cmd):
+                if part == selected_pass:
+                    safe_cmd[i] = '***'
+        except Exception:
+            pass
+        if not ok:
+            raise HTTPException(status_code=502, detail={
+                'message': 'Submission failed',
+                'returncode': proc.returncode,
+                'stdout': (stdout.decode() if stdout else '')[:4000],
+                'stderr': (stderr.decode() if stderr else '')[:4000],
+                'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None,
+                'args': {'nif':nif,'year':year,'month':month}
+            })
+        return { 'ok': True, 'output': out_text[:4000], 'returncode': proc.returncode, 'args': {'nif':nif,'year':year,'month':month}, 'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to invoke JAR: {e.__class__.__name__}: {str(e)}")

@@ -12,3 +12,16 @@ class UsersRepo:
             {'$set':{'at':{'user':euser,'pass':epass,'updated_at':datetime.now(timezone.utc)}}}
         );
         return True
+
+    # Multi-entry management keyed by 'ident' (e.g., NIF). Stored under 'at_entries' dict where key is encrypted ident.
+    async def upsert_at_entry(self, u: str, ident_enc: str, pass_enc: str):
+        await self.col.update_one(
+            { 'username': u },
+            { '$set': { f'at_entries.{ident_enc}': { 'pass': pass_enc, 'updated_at': datetime.now(timezone.utc) } } },
+            upsert=False
+        )
+        return True
+
+    async def get_at_entries(self, u: str):
+        doc = await self.col.find_one({ 'username': u }, { 'at_entries': 1, '_id': 0 })
+        return (doc or {}).get('at_entries') or {}
