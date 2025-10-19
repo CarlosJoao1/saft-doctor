@@ -370,6 +370,7 @@ async def validate_with_jar(
     file: UploadFile = File(...),
     current=Depends(get_current_user),
     db=Depends(get_db),
+    full: int = 0,  # set to 1 to disable truncation
 ):
     """Validate a SAFT XML by invoking FACTEMICLI.jar with CLI params extracted from XML.
 
@@ -411,11 +412,65 @@ async def validate_with_jar(
 
     # Build command
     jar_path = _jar_path()
-    if not os.path.isfile(jar_path):
-        raise HTTPException(status_code=400, detail=f"FACTEMICLI.jar not found at {jar_path}")
-    # Some tools expect @ before the path to indicate file input; keep close to provided spec
-    input_arg = '@' + saft_path
-    cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op','enviar','-i',input_arg]
+    # Transcript container
+    transcript = {
+        'cwd': os.getcwd(),
+        'jar': {'path': jar_path, 'exists': os.path.isfile(jar_path), 'size': None},
+        'file': {'path': saft_path, 'size': None},
+        'java_version': None,
+        'args': {'nif': nif, 'year': year, 'month': month},
+        'op': None,
+        'cmd_masked': None,
+    }
+    try:
+        if transcript['jar']['exists']:
+            try:
+                transcript['jar']['size'] = os.path.getsize(jar_path)
+            except Exception:
+                pass
+        try:
+            transcript['file']['size'] = os.path.getsize(saft_path)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # Preflight: java -version
+    try:
+        proc_jv = await asyncio.create_subprocess_exec(
+            'java','-version', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            jv_out, jv_err = await asyncio.wait_for(proc_jv.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            proc_jv.kill()
+            jv_out, jv_err = b'', b'Timeout checking java -version'
+            rc = None
+        else:
+            rc = proc_jv.returncode
+        transcript['java_version'] = {
+            'returncode': rc,
+            'stdout': (jv_out.decode() if jv_out else ''),
+            'stderr': (jv_err.decode() if jv_err else ''),
+        }
+    except Exception as e:
+        transcript['java_version'] = { 'error': f'{e.__class__.__name__}: {str(e)}' }
+    if not transcript['jar']['exists']:
+        return {
+            'ok': False,
+            'error': 'FACTEMICLI.jar not found',
+            'returncode': None,
+            'stdout': '',
+            'stderr': '',
+            'args': transcript['args'],
+            'cmd_masked': None,
+            'jar_path': jar_path,
+            'transcript': transcript,
+        }
+    # Validation mode: use operation 'validar' and -f <path> (no @)
+    op = os.getenv('FACTEMICLI_VALIDATE_OP', 'validar')
+    file_flag = os.getenv('FACTEMICLI_VALIDATE_FILE_FLAG', '-f')
+    transcript['op'] = op
+    cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op',op, file_flag, saft_path]
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -428,9 +483,7 @@ async def validate_with_jar(
         except asyncio.TimeoutError:
             proc.kill()
             raise HTTPException(status_code=504, detail="Validation timed out")
-        out_text = (stdout.decode() if stdout else '') + (('\n' + stderr.decode()) if stderr else '')
         ok = (proc.returncode == 0)
-        preview = out_text[:4000]
         # Prepare masked command for diagnostics
         safe_cmd = list(cmd)
         try:
@@ -439,14 +492,23 @@ async def validate_with_jar(
                     safe_cmd[i] = '***'
         except Exception:
             pass
+        transcript['cmd_masked'] = safe_cmd
+        # Truncation
+        limit = 10000 if not full else None
+        def trunc(s: str) -> str:
+            if s is None: return ''
+            if limit is None: return s
+            return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
         return {
             'ok': ok,
             'returncode': proc.returncode,
-            'output': preview,
-            'stdout': (stdout.decode() if stdout else '')[:4000],
-            'stderr': (stderr.decode() if stderr else '')[:4000],
+            'stdout': trunc(stdout.decode() if stdout else ''),
+            'stderr': trunc(stderr.decode() if stderr else ''),
             'args': {'nif':nif,'year':year,'month':month},
-            'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None
+            'cmd_masked': safe_cmd,
+            'cmd': safe_cmd if os.getenv('EXPOSE_CMD','0')=='1' else None,
+            'jar_path': jar_path,
+            'transcript': transcript
         }
     except HTTPException:
         raise
@@ -456,10 +518,18 @@ async def validate_with_jar(
         hint = None
         if etype == 'FileNotFoundError':
             hint = "java executable not found on PATH or JAR path invalid"
-        detail = f"Failed to invoke JAR: {etype}: {msg}"
-        if hint:
-            detail += f" (hint: {hint})"
-        raise HTTPException(status_code=500, detail=detail)
+        transcript['error'] = { 'type': etype, 'message': msg, 'hint': hint }
+        return {
+            'ok': False,
+            'error': f"Failed to invoke JAR: {etype}: {msg}",
+            'returncode': None,
+            'stdout': '',
+            'stderr': '',
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': transcript.get('cmd_masked'),
+            'jar_path': jar_path,
+            'transcript': transcript
+        }
 
 
 @router.post("/submit")
