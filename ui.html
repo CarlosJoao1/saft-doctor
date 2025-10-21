@@ -351,7 +351,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=14"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -431,17 +431,8 @@
                 <!-- Fase 1: Validação -->
                 <div id="validation-phase">
                     <div class="btn-group">
-                        <button class="btn" onclick="presignUpload()">
-                            <span>☁️</span> Upload via Presign
-                        </button>
-                            <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                            <button class="btn" id="btn-jar" onclick="validateSmart()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                            <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                            <span>☁️</span> Validar do B2
+                        <button class="btn" id="btn-jar" onclick="validateSmart()">
+                            <span>🔍</span> Validar Ficheiro
                         </button>
                         <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
                             <span>👁️</span> Ver comando
