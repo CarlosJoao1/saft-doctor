@@ -42,6 +42,9 @@ window.presignUpload = async function() {
     const f = fI.files[0];
     setStatus('☁️ A gerar URL presignada…', 'info');
     logLine('Solicitar presign-upload…');
+        const btnB2 = document.getElementById('btn-b2');
+        const btnJar = document.getElementById('btn-jar');
+        const btnBasic = document.getElementById('btn-validate');
     try {
         const res = await fetch('/pt/files/presign-upload', {
             method: 'POST',
@@ -51,6 +54,9 @@ window.presignUpload = async function() {
         const j = await res.json();
         if (!res.ok) throw new Error(j.detail || 'Falha ao gerar URL presignada');
         setStatus('📤 A enviar ficheiro para o B2…', 'info');
+        if (btnB2) btnB2.disabled = true;
+        if (btnJar) btnJar.disabled = true;
+        if (btnBasic) btnBasic.disabled = true;
         const put = await fetch(j.url, { method: 'PUT', headers: j.headers || {}, body: f });
         if (!put.ok && put.status !== 200 && put.status !== 201) throw new Error('PUT falhou com status ' + put.status);
         state.objectKey = j.object;
@@ -58,9 +64,15 @@ window.presignUpload = async function() {
         if (okEl) okEl.textContent = state.objectKey;
         setStatus('✅ Upload concluído. object_key definido.', 'success');
         logLine('Upload presign: OK → ' + state.objectKey);
+            if (btnB2) btnB2.disabled = false;
+            if (btnJar) btnJar.disabled = false;
+            if (btnBasic) btnBasic.disabled = false;
     } catch (e) {
         setStatus('❌ Erro no upload presignado: ' + e.message, 'error');
         logLine('Erro presign-upload: ' + e.message);
+            if (btnB2) btnB2.disabled = false;
+            if (btnJar) btnJar.disabled = false;
+            if (btnBasic) btnBasic.disabled = false;
     }
 };
 

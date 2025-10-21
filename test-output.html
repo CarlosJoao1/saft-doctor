@@ -26,97 +26,30 @@
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
-            padding-top: 60px; /* espaço para navbar fixa */
-        }
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: var(--shadow-lg);
-            z-index: 1000;
-        }
-        .navbar-brand {
-            font-size: 1.25rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .navbar-user {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            font-size: 0.875rem;
-        }
-        .navbar-user .user-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-        }
-        .navbar-user .btn-logout {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: none;
-            padding: 0.4rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.2s;
-        }
-        .navbar-user .btn-logout:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        .login-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        .login-overlay.hidden {
-            display: none;
-        }
-        .login-card {
-            background: var(--surface);
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: var(--shadow-lg);
-            max-width: 400px;
-            width: 90%;
-        }
-        .login-card h2 {
-            margin-bottom: 1.5rem;
-            color: var(--text);
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 2rem 1rem;
         }
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-lg);
+        }
+        header .container {
+            padding: 0 1rem;
+        }
         h1 {
-            font-size: 1.5rem;
+            font-size: 2rem;
             font-weight: 700;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
         .subtitle {
             opacity: 0.9;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
+            font-size: 1rem;
         }
         .tabs {
             display: flex;
@@ -354,51 +287,16 @@
     <script src="/static/app.js?v=2"></script>
 </head>
 <body>
-    <!-- Navbar fixa no topo -->
-    <nav class="navbar">
-        <div class="navbar-brand">
-            🩺 SAFT Doctor
+    <header>
+        <div class="container">
+            <h1>🩺 SAFT Doctor</h1>
+            <p class="subtitle">Validador profissional de ficheiros SAFT-T (PT)</p>
         </div>
-        <div class="navbar-user">
-            <div class="user-info">
-                <span>👤</span>
-                <span id="navbar-username">Não autenticado</span>
-            </div>
-            <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
-                Sair
-            </button>
-        </div>
-    </nav>
-
-    <!-- Login overlay (aparece quando não está autenticado) -->
-    <div class="login-overlay" id="login-overlay">
-        <div class="login-card">
-            <h2>🔐 Autenticação</h2>
-            <div class="form-group">
-                <label class="form-label">Username</label>
-                <input type="text" id="login_user" placeholder="dev" value="dev" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" id="login_pass" placeholder="dev" value="dev" />
-            </div>
-            <div class="btn-group" style="margin-top: 1rem;">
-                <button class="btn" onclick="doLogin()">🔓 Entrar</button>
-            </div>
-            <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                Utilize <strong>dev/dev</strong> para acesso rápido
-            </div>
-        </div>
-    </div>
+    </header>
 
     <div class="container" style="padding-bottom: 4rem;">
-        <div style="margin-bottom: 1rem;">
-            <h1>Validador profissional de ficheiros SAFT-T (PT)</h1>
-        </div>
-
         <div class="tabs">
             <button class="tab active" data-tab="app" onclick="showTab('app')">📄 Validação</button>
-            <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
             <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
             <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
         </div>
@@ -416,61 +314,14 @@
                     <label class="form-label">Escolha um ficheiro XML</label>
                     <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Workflow de validação</label>
-                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border-radius: 6px; font-size: 0.875rem; color: #0d47a1;">
-                        <strong>📋 Processo em 2 fases:</strong><br>
-                        1️⃣ <strong>Validar</strong>: Verifica sintaxe XML<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Com credenciais AT: output completo + estatísticas<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Sem credenciais: validação básica de sintaxe<br>
-                        2️⃣ <strong>Enviar</strong>: Submete à AT (requer credenciais obrigatórias)
-                    </div>
+                <div class="btn-group">
+                    <button class="btn" id="btn" onclick="validate()">
+                        <span>✓</span> Validação básica
+                    </button>
+                    <button class="btn" onclick="validateWithJar()">
+                        <span>🚀</span> Validação JAR (AT)
+                    </button>
                 </div>
-
-                <!-- Fase 1: Validação -->
-                <div id="validation-phase">
-                    <div class="btn-group">
-                            <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                            <button class="btn" id="btn-jar" onclick="validateWithJar()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                            <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                            <span>☁️</span> Validar do B2
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
-                            <span>👁️</span> Ver comando
-                        </button>
-                    </div>
-                </div>
-                    <div id="upload-progress" style="display:none; margin-top: 0.5rem;">
-                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Upload:</div>
-                        <div style="height: 8px; background: #e5e7eb; border-radius: 6px; overflow: hidden;">
-                            <div id="upload-progress-bar" style="height: 100%; width: 0%; background: #2563eb;"></div>
-                        </div>
-                        <div id="upload-progress-text" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">0%</div>
-                    </div>
-                
-                <!-- Fase 2: Envio (só aparece após validação OK) -->
-                <div id="submit-phase" style="display:none; margin-top:15px; padding:15px; background:#d4edda; border-radius:8px; border:2px solid #28a745;">
-                    <p style="margin:0 0 10px 0; color:#155724; font-weight:bold; font-size:0.95rem;">
-                        ✅ Ficheiro validado com sucesso! Pronto para enviar à AT.
-                    </p>
-                    <div class="btn-group">
-                        <button class="btn" onclick="submitToAT()" style="background:#28a745; border-color:#28a745;">
-                            <span>�</span> 2. Enviar à Autoridade Tributária
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewJarCommand('enviar')">
-                            <span>👁️</span> Ver comando
-                        </button>
-                    </div>
-                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: #fff3cd; border-radius: 6px; font-size: 0.875rem; color: #856404;">
-                        ⚠️ <strong>Requer credenciais AT guardadas para o NIF do ficheiro</strong>
-                    </div>
-                </div>
-                
                 <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px;">
                     <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
                         Comando executado:
@@ -502,91 +353,25 @@
                     <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
                 </div>
             </div>
-        </div>
 
-        <!-- TAB: Histórico -->
-        <div id="panel-history" class="tabpanel">
             <div class="card">
-                <div class="log-header">
-                    <h3>📜 Histórico de Validações</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Atualizar</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
-                </p>
-                
-                <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <h3>👤 Autenticação</h3>
+                <div class="grid grid-2">
                     <div class="form-group">
-                        <label class="form-label">Filtrar por NIF</label>
-                        <input type="text" id="history-filter-nif" placeholder="Ex: 501789227" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                        <label class="form-label">Username</label>
+                        <input type="text" id="l_user" placeholder="dev" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Ano</label>
-                        <input type="text" id="history-filter-year" placeholder="Ex: 2025" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Mês</label>
-                        <input type="text" id="history-filter-month" placeholder="Ex: 09" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                        <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
+                        <label class="form-label">Password</label>
+                        <input type="password" id="l_pass" placeholder="dev" />
                     </div>
                 </div>
-                
-                <!-- Loading state -->
-                <div id="history-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
-                    <div>A carregar histórico...</div>
+                <div class="btn-group">
+                    <button class="btn" onclick="loginUser()">🔓 Login</button>
+                    <button class="btn btn-secondary" onclick="loginDev()">⚡ Login rápido (dev/dev)</button>
                 </div>
-                
-                <!-- Empty state -->
-                <div id="history-empty" style="display: none; text-align: center; padding: 3rem; color: var(--text-secondary);">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
-                    <h4>Nenhuma validação encontrada</h4>
-                    <p>Valide um ficheiro SAFT para começar a criar histórico.</p>
-                </div>
-                
-                <!-- Results table -->
-                <div id="history-results" style="display: none;">
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                            <thead>
-                                <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
-                                    <th style="padding: 0.75rem; text-align: left;">Data/Hora</th>
-                                    <th style="padding: 0.75rem; text-align: left;">NIF</th>
-                                    <th style="padding: 0.75rem; text-align: center;">Período</th>
-                                    <th style="padding: 0.75rem; text-align: left;">Operação</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Faturas</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Créditos (€)</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Débitos (€)</th>
-                                    <th style="padding: 0.75rem; text-align: center;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="history-table-body">
-                                <!-- Populated by JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Pagination -->
-                    <div id="history-pagination" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--bg); border-radius: 8px;">
-                        <div id="history-info" style="color: var(--text-secondary); font-size: 0.9rem;">
-                            <!-- Populated by JavaScript -->
-                        </div>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button id="history-prev" class="btn btn-secondary btn-sm" onclick="historyPrevPage()" disabled>← Anterior</button>
-                            <button id="history-next" class="btn btn-secondary btn-sm" onclick="historyNextPage()" disabled>Seguinte →</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Error display -->
-                <div id="history-error" style="display: none; padding: 1rem; background: #fee; border: 1px solid #fcc; border-radius: 8px; color: #c00; margin-top: 1rem;">
-                    <!-- Populated by JavaScript -->
+                <div style="margin-top: 0.75rem;">
+                    <span id="token_status" class="badge badge-error">Não autenticado</span>
                 </div>
             </div>
         </div>
