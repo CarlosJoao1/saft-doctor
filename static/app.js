@@ -310,6 +310,73 @@ window.validateWithJar = async function() {
     }
 };
 
+// Validar ficheiro diretamente do B2 (usa state.objectKey)
+window.validateFromB2 = async function() {
+    if (!state.token) {
+        setStatus('⚠️ Faça login primeiro', 'error');
+        return;
+    }
+    if (!state.objectKey) {
+        setStatus('⚠️ Faça upload via Presign para obter object_key', 'error');
+        return;
+    }
+    const out = document.getElementById('out');
+    const cmdEl = document.getElementById('cmd_mask');
+    const submitPhase = document.getElementById('submit-phase');
+    if (submitPhase) submitPhase.style.display = 'none';
+
+    setStatus('☁️ A validar do B2 (sem upload)…', 'info');
+    logLine('========================================');
+    logLine('☁️ VALIDAÇÃO DO B2 - Operação: VALIDAR');
+    logLine('========================================');
+    try {
+        const r = await fetch('/pt/validate-jar-by-key?full=1&operation=validar', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + state.token,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ object_key: state.objectKey })
+        });
+        const txt = await r.text();
+        let data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch(_) {}
+        out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
+
+        if (data && data.cmd_masked && Array.isArray(data.cmd_masked)) {
+            cmdEl.textContent = data.cmd_masked.join(' ');
+            logLine('📋 Comando executado:');
+            logLine('   ' + data.cmd_masked.join(' '));
+
+            if (data.returncode !== undefined && data.returncode !== null) {
+                logLine('📊 Return code: ' + data.returncode);
+            }
+
+            const allOutput = ((data.stdout || '') + '\n' + (data.stderr || ''));
+            const validationSuccess = /validado com sucesso|response code="200"/i.test(allOutput);
+
+            let sev = 'ok', msg = 'Execução concluída.';
+            if (/parametro .*n[aã]o conhecido|parametros dispon[ií]veis|usage/.test(allOutput.toLowerCase())) { sev = 'error'; msg = 'Execução JAR incorreta (parâmetros).'; }
+            else if (data.returncode !== 0) { sev = 'error'; msg = 'Return code diferente de 0.'; }
+            else if (/(erro|error|inv[aá]lid|falh[ao])/i.test(allOutput) && !validationSuccess) { sev = 'warning'; msg = 'Mensagens de erro/aviso no output.'; }
+
+            const human = sev === 'ok' ? '✅ OK' : (sev === 'warning' ? '⚠️ Com avisos' : '❌ Com erros');
+            logLine('');
+            logLine('🏁 RESUMO: ' + human + (msg ? ' – ' + msg : ''));
+            if (validationSuccess && data.returncode === 0) {
+                if (submitPhase) submitPhase.style.display = 'block';
+            }
+            setStatus('Validação (B2): ' + human + (msg ? ' – ' + msg : ''), sev === 'ok' ? 'success' : sev === 'warning' ? 'warning' : 'error');
+        } else {
+            cmdEl.textContent = '(nenhum comando executado)';
+            logLine('⚠️ Sem comando retornado pela API');
+        }
+    } catch (e) {
+        setStatus('❌ Erro na validação (B2): ' + e.message, 'error');
+        logLine('❌ ERRO (B2): ' + e.message);
+    }
+};
+
 // Nova função: Enviar ficheiro à AT (Fase 2)
 window.submitToAT = async function() {
     if (!state.token) {

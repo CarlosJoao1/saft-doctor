@@ -739,6 +739,207 @@ async def validate_with_jar(
         }
 
 
+@router.post("/validate-jar-by-key")
+async def validate_with_jar_by_key(
+    body: PresignDownloadIn,
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+    full: int = 0,
+    operation: str = 'validar',
+    dry_run: int = 0,
+):
+    """Validate or submit a SAFT XML that already exists in Backblaze, referenced by object_key.
+
+    Downloads the object to a temp file and runs the same flow as validate_with_jar, avoiding large uploads.
+    """
+    from core.saft_validator import parse_xml, extract_cli_params
+    from core.storage import Storage
+    import tempfile
+
+    country = get_country(request)
+    username = current["username"]
+
+    # Download to local temp file
+    storage = Storage()
+    saft_path = await storage.fetch_to_local(country, body.object_key)
+    original_name = os.path.basename(body.object_key)
+
+    # Read file bytes for XML parsing
+    try:
+        with open(saft_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read object: {e}")
+
+    # Extract params
+    try:
+        root = parse_xml(data)
+    except Exception as e:
+        return {
+            'ok': False,
+            'error': f"Invalid XML: {str(e)}",
+            'args': None,
+            'cmd_masked': None,
+            'jar_path': _jar_path(),
+            'transcript': { 'error': 'invalid-xml' }
+        }
+    params = extract_cli_params(root)
+    nif = params.get('nif'); year = params.get('year'); month = params.get('month')
+    missing = [k for k in ['nif','year','month'] if not params.get(k)]
+    if missing:
+        return {
+            'ok': False,
+            'error': f"Missing fields in XML for CLI: {', '.join(missing)}",
+            'args': {'nif': nif, 'year': year, 'month': month},
+            'cmd_masked': None,
+            'jar_path': _jar_path(),
+            'transcript': { 'error': 'missing-fields' }
+        }
+
+    # Credentials
+    repo = UsersRepo(db, country)
+    u = await repo.get(username)
+    if not u:
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
+    selected_pass = await _select_at_password(repo, username, nif)
+    if not selected_pass and operation == 'enviar':
+        return {
+            'ok': False,
+            'error': f'Operation "enviar" requires AT password for NIF {nif}. Save it in Credenciais first.',
+            'returncode': None,
+            'stdout': '',
+            'stderr': '',
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': ['java','-jar',_jar_path(),' -n ',nif,' -p ','***',' -a ',year,' -m ',month,' -op ',operation,' -i ',saft_path],
+            'jar_path': _jar_path(),
+            'transcript': { 'op': operation }
+        }
+
+    # Build command as in validate_with_jar
+    jar_path = _jar_path()
+    op = operation
+    if selected_pass:
+        cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op',op,'-i',saft_path]
+        safe_cmd = list(cmd)
+        for i, part in enumerate(safe_cmd):
+            if part == selected_pass:
+                safe_cmd[i] = '***'
+    else:
+        cmd = ['java','-jar',jar_path,'-op','validar','-i',saft_path]
+        safe_cmd = list(cmd)
+
+    if dry_run:
+        return {
+            'ok': True,
+            'dry_run': True,
+            'returncode': None,
+            'stdout': '',
+            'stderr': '',
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': safe_cmd,
+            'jar_path': jar_path,
+            'message': f'Dry run - comando "{op}" não foi executado'
+        }
+
+    # Execute
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return {
+                'ok': False,
+                'error': 'Validation timed out',
+                'timeout': True,
+                'returncode': None,
+                'stdout': '',
+                'stderr': '',
+                'args': {'nif':nif,'year':year,'month':month},
+                'cmd_masked': safe_cmd,
+                'jar_path': jar_path,
+            }
+        ok = (proc.returncode == 0)
+        stdout_str = stdout.decode() if stdout else ''
+        stderr_str = stderr.decode() if stderr else ''
+
+        # Archive if success (same as validate_with_jar)
+        storage_key = None
+        validation_id = None
+        archive_error = None
+        if ok and not dry_run:
+            try:
+                from core.saft_archiver import (
+                    parse_jar_response_xml,
+                    is_validation_successful,
+                    create_zip_filename,
+                    compress_xml_to_zip,
+                    generate_storage_key
+                )
+                from core.validation_history import ValidationHistoryRepo
+                from core.storage import Storage
+                import tempfile
+
+                if is_validation_successful(stdout_str, proc.returncode):
+                    stats = parse_jar_response_xml(stdout_str)
+                    zip_filename = create_zip_filename(nif, year, month)
+                    temp_zip = os.path.join(tempfile.gettempdir(), zip_filename)
+                    zip_size = compress_xml_to_zip(saft_path, temp_zip, original_filename=original_name)
+                    storage_key = generate_storage_key(nif, year, month, zip_filename, country=country)
+                    storage = Storage()
+                    storage.client.upload_file(temp_zip, storage.bucket, storage_key)
+                    history_repo = ValidationHistoryRepo(db, country=country)
+                    validation_id = await history_repo.save_validation(
+                        username=username,
+                        nif=nif,
+                        year=year,
+                        month=month,
+                        operation=op,
+                        jar_stdout=stdout_str,
+                        jar_stderr=stderr_str,
+                        returncode=proc.returncode,
+                        file_info={ 'name': original_name, 'size': os.path.getsize(saft_path), 'zip_size': zip_size },
+                        statistics=stats,
+                        response_xml=stats.get('raw_xml'),
+                        storage_key=storage_key
+                    )
+                    try:
+                        os.unlink(temp_zip)
+                    except Exception:
+                        pass
+            except Exception as e:
+                archive_error = f"{e.__class__.__name__}: {str(e)}"
+
+        limit = 10000 if not full else None
+        def trunc(s: str) -> str:
+            if s is None: return ''
+            if limit is None: return s
+            return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
+
+        resp = {
+            'ok': ok,
+            'returncode': proc.returncode,
+            'stdout': trunc(stdout_str),
+            'stderr': trunc(stderr_str),
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': safe_cmd,
+            'jar_path': jar_path,
+        }
+        if validation_id:
+            resp['validation_id'] = validation_id
+            resp['storage_key'] = storage_key
+            resp['archived'] = True
+        if archive_error:
+            resp['archive_error'] = archive_error
+        return resp
+    finally:
+        try:
+            os.unlink(saft_path)
+        except Exception:
+            pass
+
+
 @router.get("/validation-history")
 async def get_validation_history(
     request: Request,
