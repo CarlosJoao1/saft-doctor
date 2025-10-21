@@ -1,10 +1,20 @@
 import os,tempfile,boto3
 from botocore.config import Config
+
 class Storage:
     def __init__(self):
-        self.endpoint=os.getenv('B2_ENDPOINT'); self.region=os.getenv('B2_REGION'); self.bucket=os.getenv('B2_BUCKET')
-        self.client=boto3.client('s3',endpoint_url=self.endpoint,region_name=self.region,
-            aws_access_key_id=os.getenv('B2_KEY_ID'),aws_secret_access_key=os.getenv('B2_APP_KEY'),config=Config(s3={'addressing_style':'virtual'}))
+        self.endpoint = os.getenv('B2_ENDPOINT')
+        self.region = os.getenv('B2_REGION')
+        self.bucket = os.getenv('B2_BUCKET')
+        # Use path-style addressing for better browser compatibility with CORS/presigned URLs
+        self.client = boto3.client(
+            's3',
+            endpoint_url=self.endpoint,
+            region_name=self.region,
+            aws_access_key_id=os.getenv('B2_KEY_ID'),
+            aws_secret_access_key=os.getenv('B2_APP_KEY'),
+            config=Config(s3={'addressing_style': 'path'})
+        )
     async def put(self,country,key,data,content_type=None):
         full=f"{country}/{key}" if not key.startswith(f"{country}/") else key
         extra={'ContentType':content_type} if content_type else {}
