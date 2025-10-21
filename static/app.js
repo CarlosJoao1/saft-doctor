@@ -29,6 +29,49 @@ window.logLine = function(msg) {
     el.scrollTop = el.scrollHeight;
 };
 
+// Upload direto para B2 usando URL presignado
+window.presignUpload = async function() {
+    if (!state.token) {
+        setStatus('⚠️ Faça login primeiro', 'error');
+        return;
+    }
+    const fI = document.getElementById('file');
+    if (!fI.files.length) {
+        setStatus('⚠️ Escolha um ficheiro XML primeiro', 'error');
+        return;
+    }
+    const f = fI.files[0];
+    setStatus('☁️ A gerar URL presignada…', 'info');
+    logLine('Solicitar presign-upload…');
+    try {
+        const res = await fetch('/pt/files/presign-upload', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + state.token
+            },
+            body: JSON.stringify({ filename: f.name, content_type: f.type || 'application/octet-stream' })
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.detail || 'Falha ao gerar URL presignada');
+
+        setStatus('📤 A enviar ficheiro para o B2…', 'info');
+        const put = await fetch(j.url, { method: 'PUT', headers: j.headers || {}, body: f });
+        if (!put.ok && put.status !== 200 && put.status !== 201) {
+            throw new Error('PUT falhou com status ' + put.status);
+        }
+
+        state.objectKey = j.object;
+        const okEl = document.getElementById('object_key');
+        if (okEl) okEl.textContent = state.objectKey;
+        setStatus('✅ Upload concluído. object_key definido.', 'success');
+        logLine('Upload presign: OK → ' + state.objectKey);
+    } catch (e) {
+        setStatus('❌ Erro no upload presignado: ' + e.message, 'error');
+        logLine('Erro presign-upload: ' + e.message);
+    }
+};
+
 window.clearLog = function() {
     const el = document.getElementById('log');
     if (el) el.textContent = '(log vazio)';
