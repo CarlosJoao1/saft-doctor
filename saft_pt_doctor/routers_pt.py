@@ -561,13 +561,16 @@ async def validate_with_jar(
         }
 
     try:
+        # Allow configurable timeout for large files/long validations
+        TIMEOUT = int(os.getenv('FACTEMICLI_TIMEOUT', '300'))
+
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
         except asyncio.TimeoutError:
             proc.kill()
             # Return a structured timeout result instead of raising, so the UI can show the command
@@ -844,9 +847,10 @@ async def validate_with_jar_by_key(
 
     # Execute
     try:
+        TIMEOUT = int(os.getenv('FACTEMICLI_TIMEOUT', '300'))
         proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
         except asyncio.TimeoutError:
             proc.kill()
             return {
