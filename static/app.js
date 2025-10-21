@@ -233,6 +233,12 @@ window.validateWithJar = async function() {
         } catch (_) {}
         out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
 
+        // Timeout feedback
+        if (data && data.timeout) {
+            setStatus('⏳ Validation timed out. Aumente FACTEMICLI_TIMEOUT no servidor (ex.: 600–1200s).', 'warning');
+            logLine('⏳ Timeout: aumente FACTEMICLI_TIMEOUT no backend.');
+        }
+
         if (data && data.cmd_masked && Array.isArray(data.cmd_masked)) {
             cmdEl.textContent = data.cmd_masked.join(' ');
             logLine('📋 Comando executado:');
@@ -343,6 +349,11 @@ window.validateFromB2 = async function() {
         try { data = txt ? JSON.parse(txt) : null; } catch(_) {}
         out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
 
+        if (data && data.timeout) {
+            setStatus('⏳ Validation timed out. Aumente FACTEMICLI_TIMEOUT no servidor (ex.: 600–1200s).', 'warning');
+            logLine('⏳ Timeout: aumente FACTEMICLI_TIMEOUT no backend.');
+        }
+
         if (data && data.cmd_masked && Array.isArray(data.cmd_masked)) {
             cmdEl.textContent = data.cmd_masked.join(' ');
             logLine('📋 Comando executado:');
@@ -415,6 +426,11 @@ window.submitToAT = async function() {
             data = txt ? JSON.parse(txt) : null;
         } catch (_) {}
         out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
+
+        if (data && data.timeout) {
+            setStatus('⏳ Validation timed out. Aumente FACTEMICLI_TIMEOUT no servidor (ex.: 600–1200s).', 'warning');
+            logLine('⏳ Timeout: aumente FACTEMICLI_TIMEOUT no backend.');
+        }
 
         if (data && data.cmd_masked && Array.isArray(data.cmd_masked)) {
             cmdEl.textContent = data.cmd_masked.join(' ');
