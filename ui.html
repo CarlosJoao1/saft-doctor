@@ -431,16 +431,16 @@
                 <!-- Fase 1: Validação -->
                 <div id="validation-phase">
                     <div class="btn-group">
+                        <button class="btn" id="btn-jar" onclick="validateSmart()">
+                            <span>🔍</span> 1. Validar Ficheiro
+                        </button>
+                        <button class="btn" id="btn-validate" onclick="validate()">
+                            <span>✓</span> Validação básica
+                        </button>
                         <button class="btn" onclick="presignUpload()">
                             <span>☁️</span> Upload via Presign
                         </button>
-                            <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                            <button class="btn" id="btn-jar" onclick="validateSmart()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                            <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
+                        <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
                             <span>☁️</span> Validar do B2
                         </button>
                         <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
@@ -490,17 +490,17 @@
 
             <div class="card">
                 <div class="log-header">
-                    <h3>📊 Resultado</h3>
+                    <h3>� Log de execução</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
                 </div>
-                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
+                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
             </div>
 
             <div class="card">
                 <div class="log-header">
-                    <h3>📝 Log de execução</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
+                    <h3>� Resultado</h3>
                 </div>
-                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
+                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
             </div>
 
             <div class="card">
