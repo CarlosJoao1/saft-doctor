@@ -431,6 +431,9 @@
                 <!-- Fase 1: Validação -->
                 <div id="validation-phase">
                     <div class="btn-group">
+                        <button class="btn" onclick="presignUpload()">
+                            <span>☁️</span> Upload via Presign
+                        </button>
                         <button class="btn" id="btn" onclick="validate()">
                             <span>✓</span> Validação básica
                         </button>
@@ -443,6 +446,10 @@
                         <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
                             <span>👁️</span> Ver comando
                         </button>
+                    </div>
+                    <div style="margin-top: 0.75rem; padding: 0.6rem; background: var(--bg); border-radius: 8px; font-size: 0.9rem;">
+                        <span style="color: var(--text-secondary);">object_key:</span>
+                        <code id="object_key" class="code">(nenhum)</code>
                     </div>
                 </div>
                 
