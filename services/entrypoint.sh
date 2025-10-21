@@ -64,14 +64,20 @@ except Exception:
 PY
 )
 		if [ "$STATUS" != "OK" ]; then
-			echo "Provided MASTER_KEY is invalid. Replacing with a development key at $KEY_FILE"
-			mkdir -p /var/saft || true
-			python - <<'PY' > "$KEY_FILE"
+			if [ -f "$KEY_FILE" ]; then
+				echo "Provided MASTER_KEY is invalid. Loading existing key from $KEY_FILE (key reused to decrypt existing data)"
+				export MASTER_KEY="$(tr -d '\r\n' < "$KEY_FILE")"
+			else
+				echo "Provided MASTER_KEY is invalid and no stored key found. Generating NEW key at $KEY_FILE"
+				mkdir -p /var/saft || true
+				python - <<'PY' > "$KEY_FILE"
 from cryptography.fernet import Fernet
 print(Fernet.generate_key().decode())
 PY
-			chmod 600 "$KEY_FILE" || true
-			export MASTER_KEY="$(tr -d '\r\n' < "$KEY_FILE")"
+				chmod 600 "$KEY_FILE" || true
+				export MASTER_KEY="$(tr -d '\r\n' < "$KEY_FILE")"
+				echo "New MASTER_KEY generated and saved."
+			fi
 		fi
 	fi
 }
@@ -79,4 +85,4 @@ PY
 ensure_master_key
 
 # Start uvicorn (module under services.main since we set PYTHONPATH=/app)
-exec python -m uvicorn services.main:app --host 0.0.0.0 --port "$PORT"
+exec python -m uvicorn services.app2:app --host 0.0.0.0 --port "$PORT"

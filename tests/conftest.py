@@ -47,5 +47,5 @@ def client(monkeypatch):
     monkeypatch.setattr(sec, "encrypt", lambda s: "enc:"+s)
     monkeypatch.setattr(sec, "decrypt", lambda s: s.split("enc:")[1])
 
-    from services.main import app
+    from services.main_clean import app
     return TestClient(app)
