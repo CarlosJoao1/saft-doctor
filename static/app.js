@@ -230,6 +230,29 @@ window.validateSmart = async function() {
         if (out) out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
         const cmdEl = document.getElementById('cmd_mask');
         if (data?.cmd_masked?.join) cmdEl.textContent = data.cmd_masked.join(' ');
+        // Append detailed JAR results to execution log
+        try {
+            if (data) {
+                if (Array.isArray(data.cmd_masked)) {
+                    logLine('cmd: ' + data.cmd_masked.join(' '));
+                }
+                if (typeof data.returncode !== 'undefined') {
+                    logLine('returncode: ' + data.returncode);
+                }
+                const logPreview = (label, content) => {
+                    if (!content) return;
+                    const lines = String(content).split(/\r?\n/);
+                    const maxLines = 200; // avoid flooding log
+                    const slice = lines.slice(0, maxLines);
+                    for (const ln of slice) logLine(label + ': ' + ln);
+                    if (lines.length > maxLines) logLine(label + ': ... [truncated]');
+                };
+                if (data.stdout) logPreview('stdout', data.stdout);
+                if (data.stderr) logPreview('stderr', data.stderr);
+            } else if (txt) {
+                logLine('raw: ' + (txt.length > 2000 ? (txt.slice(0,2000)+'... [truncated]') : txt));
+            }
+        } catch(_) {}
         if (vres.ok) {
             logLine('✅ Validação concluída com sucesso.');
             setStatus('✅ Validação concluída (upload chunked).', 'success');
