@@ -100,11 +100,42 @@ window.presignUpload = async function() {
         if (btnB2) btnB2.disabled = true;
         if (btnJar) btnJar.disabled = true;
         if (btnBasic) btnBasic.disabled = true;
-        const put = await fetch(j.url, { method: 'PUT', headers: j.headers || {}, body: f });
-        if (!put.ok && put.status !== 200 && put.status !== 201) throw new Error('PUT falhou com status ' + put.status);
+        const prog = document.getElementById('upload-progress');
+        const progBar = document.getElementById('upload-progress-bar');
+        const progText = document.getElementById('upload-progress-text');
+        if (prog) prog.style.display = '';
+        if (progBar) progBar.style.width = '0%';
+        if (progText) progText.textContent = '0%';
+
+        await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', j.url, true);
+            const headers = j.headers || {};
+            for (const k in headers) {
+                try { xhr.setRequestHeader(k, headers[k]); } catch(e) {}
+            }
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && progBar && progText) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    progBar.style.width = pct + '%';
+                    progText.textContent = pct + '%';
+                } else if (progText) {
+                    progText.textContent = 'a enviar…';
+                }
+            };
+            xhr.onerror = () => reject(new Error('Erro de rede no upload'));
+            xhr.onabort = () => reject(new Error('Upload cancelado'));
+            xhr.onload = () => {
+                if (xhr.status === 200 || xhr.status === 201) resolve(); else reject(new Error('PUT falhou com status ' + xhr.status));
+            };
+            xhr.send(f);
+        });
         state.objectKey = j.object;
-        const okEl = document.getElementById('object_key');
-        if (okEl) okEl.textContent = state.objectKey;
+    const okEl = document.getElementById('object_key');
+    if (okEl) okEl.textContent = state.objectKey;
+    state.lastFilename = f.name;
+    const okName = document.getElementById('object_key_name');
+    if (okName) okName.textContent = state.lastFilename;
         setStatus('✅ Upload concluído. object_key definido.', 'success');
         logLine('Upload presign: OK → ' + state.objectKey);
             if (btnB2) btnB2.disabled = false;
@@ -116,6 +147,22 @@ window.presignUpload = async function() {
             if (btnB2) btnB2.disabled = false;
             if (btnJar) btnJar.disabled = false;
             if (btnBasic) btnBasic.disabled = false;
+    }
+};
+
+// Validação inteligente: usa B2 se disponível; senão, faz upload via Presign e depois valida do B2
+window.validateSmart = async function() {
+    if (!state.token) { setStatus('⚠️ Faça login primeiro', 'error'); return; }
+    // Se já temos object_key, validar do B2 diretamente
+    if (state.objectKey) {
+        return await validateFromB2();
+    }
+    // Caso contrário, tenta presign e depois valida
+    await presignUpload();
+    if (state.objectKey) {
+        await validateFromB2();
+    } else {
+        setStatus('❌ Não foi possível obter object_key. Verifique o upload.', 'error');
     }
 };
 
@@ -416,9 +463,11 @@ window.validateFromB2 = async function() {
     const submitPhase = document.getElementById('submit-phase');
     if (submitPhase) submitPhase.style.display = 'none';
 
-    setStatus('☁️ A validar do B2 (sem upload)…', 'info');
+    const fname = state.lastFilename || '(desconhecido)';
+    const key = state.objectKey || '(sem object_key)';
+    setStatus(`☁️ A validar do B2: ${fname} (${key})`, 'info');
     logLine('========================================');
-    logLine('☁️ VALIDAÇÃO DO B2 - Operação: VALIDAR');
+    logLine(`☁️ VALIDAÇÃO DO B2 - Operação: VALIDAR → ${fname} (${key})`);
     logLine('========================================');
     try {
         const r = await fetch('/pt/validate-jar-by-key?full=1&operation=validar', {
