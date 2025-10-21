@@ -17,7 +17,8 @@ from core.auth_utils import create_access_token, hash_password, verify_password
 setup_logging(level=os.getenv('LOG_LEVEL', 'INFO'))
 logger = get_logger(__name__)
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'change_me')
+# Normalize SECRET_KEY to avoid accidental spaces in environment vars
+SECRET_KEY = (os.getenv('SECRET_KEY', 'change_me') or 'change_me').strip()
 ALGORITHM = 'HS256'
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 
@@ -255,6 +256,126 @@ async def health_db(db=Depends(get_db)):
         return { 'ok': True }
     except Exception as e:
         return { 'ok': False, 'error': str(e) }
+
+
+@app.get('/diag', tags=['Health'])
+async def diagnostics(request: Request, db=Depends(get_db)):
+    """Deep diagnostics for environment and dependencies.
+    Returns JSON with checks for:
+    - env/keys
+    - MongoDB connectivity
+    - Upload root directory writability
+    - Java availability and JAR presence
+    - B2 (S3) client configuration and basic connectivity
+    """
+    import time, tempfile, asyncio, os, os.path, socket
+    from core.storage import Storage
+
+    now = time.time()
+    app_env = os.getenv('APP_ENV', 'dev')
+    upload_root = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
+    jar_path = os.getenv('FACTEMICLI_JAR_PATH', '/opt/factemi/FACTEMICLI.jar')
+
+    # ENV / SECRET
+    env_info = {
+        'env': app_env,
+        'hostname': socket.gethostname(),
+        'secret_key_set': (SECRET_KEY != 'change_me'),
+        'secret_key_len': len(SECRET_KEY) if isinstance(SECRET_KEY, str) else None,
+        'secret_key_default': (SECRET_KEY == 'change_me'),
+    }
+
+    # DB
+    db_info = { 'ok': False }
+    try:
+        await db.command('ping')
+        db_info.update({
+            'ok': True,
+            'uri': os.getenv('MONGO_URI') or 'mongodb://mongo:27017',
+            'db': os.getenv('MONGO_DB','saft_doctor'),
+            'scoping': os.getenv('MONGO_SCOPING','collection_prefix')
+        })
+    except Exception as e:
+        db_info.update({ 'ok': False, 'error': str(e) })
+
+    # Upload root
+    upload_info = { 'path': upload_root, 'ok': False }
+    try:
+        os.makedirs(upload_root, mode=0o755, exist_ok=True)
+        test_path = os.path.join(upload_root, f'.diag_{int(now)}.tmp')
+        with open(test_path, 'w', encoding='utf-8') as f:
+            f.write('ok')
+        os.remove(test_path)
+        upload_info.update({ 'ok': True, 'writable': True })
+    except Exception as e:
+        upload_info.update({ 'ok': False, 'writable': False, 'error': str(e) })
+
+    # Java
+    java_info = { 'ok': False }
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            'java','-version', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill(); out, err = b'', b'timeout'
+        java_info.update({
+            'ok': (proc.returncode == 0 or proc.returncode is not None),
+            'returncode': proc.returncode,
+            'stdout': (out.decode() if out else ''),
+            'stderr': (err.decode() if err else ''),
+        })
+    except Exception as e:
+        java_info.update({ 'ok': False, 'error': str(e) })
+
+    # JAR
+    jar_info = {
+        'path': jar_path,
+        'exists': os.path.isfile(jar_path),
+        'size': None
+    }
+    try:
+        if jar_info['exists']:
+            jar_info['size'] = os.path.getsize(jar_path)
+    except Exception:
+        pass
+
+    # B2 / S3 client
+    b2_info = {
+        'endpoint': os.getenv('B2_ENDPOINT'),
+        'region': os.getenv('B2_REGION'),
+        'bucket': os.getenv('B2_BUCKET'),
+        'key_id_set': bool(os.getenv('B2_KEY_ID')),
+        'app_key_set': bool(os.getenv('B2_APP_KEY')),
+        'ok': False
+    }
+    try:
+        storage = Storage()
+        # Light-touch call: list_buckets may require permission; wrap in try
+        def _try_list():
+            try:
+                storage.client.list_buckets()
+                return True, None
+            except Exception as ex:
+                return False, str(ex)
+        ok, err = await asyncio.to_thread(_try_list)
+        b2_info['ok'] = ok
+        if not ok:
+            b2_info['error'] = err
+    except Exception as e:
+        b2_info.update({ 'ok': False, 'error': str(e) })
+
+    return {
+        'ok': (env_info['secret_key_set'] and db_info.get('ok') and upload_info.get('ok')),
+        'env': env_info,
+        'db': db_info,
+        'upload': upload_info,
+        'java': java_info,
+        'jar': jar_info,
+        'b2': b2_info,
+        'time': int(now)
+    }
 
 
 @app.post('/auth/register', tags=['Authentication'])

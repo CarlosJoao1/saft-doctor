@@ -946,6 +946,29 @@ window.loadCredsStatus = async function() {
     }
 };
 
+// Run deep diagnostics against /diag
+window.diagConnections = async function() {
+    setStatus('🔎 A correr diagnóstico (/diag)...', 'info');
+    logLine('Executar /diag');
+    try {
+        const r = await fetch('/diag');
+        const txt = await r.text();
+        let data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch (_) {}
+        const out = document.getElementById('out');
+        if (out) out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
+        if (r.ok && data) {
+            const ok = data.ok;
+            setStatus(ok ? '✅ Diagnóstico OK' : '⚠️ Diagnóstico com avisos/erros', ok ? 'success' : 'warning');
+        } else {
+            setStatus('⚠️ Diagnóstico retornou erro HTTP ' + r.status, 'warning');
+        }
+    } catch (e) {
+        setStatus('❌ Erro no diagnóstico: ' + e.message, 'error');
+        logLine('Diag erro: ' + e.message);
+    }
+};
+
 window.saveNifEntry = async function() {
     if (!state.token) {
         setStatus('⚠️ Faça login primeiro', 'error');
