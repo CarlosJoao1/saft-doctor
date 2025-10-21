@@ -194,7 +194,7 @@ window.logout = function() {
     logLine('Logout efetuado');
 };
 
-// Fetch tracer with improved logging
+// Fetch tracer with improved logging and auto-refresh on 401
 (function() {
     const orig = window.fetch;
     window.fetch = async function(input, init) {
@@ -206,6 +206,20 @@ window.logout = function() {
         const res = await orig(input, init);
         try {
             logLine(`← ${res.status} ${res.statusText || ''}`.trim());
+            // Auto-refresh token on 401
+            if (res.status === 401 && state.token) {
+                logLine('⚠️ Token expirado (401), a renovar sessão automático...');
+                setStatus('Token expirado, a renovar...', 'info');
+                // Clear current token
+                state.token = null;
+                state.username = null;
+                try { localStorage.removeItem('token'); localStorage.removeItem('username'); } catch(_){}
+                // Auto-login again
+                setTimeout(() => {
+                    logLine('🔄 A efetuar re-login automático...');
+                    doLogin();
+                }, 500);
+            }
         } catch (_) {}
         return res;
     };
