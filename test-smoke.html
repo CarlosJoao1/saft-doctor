@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smoke Test - SAFT Doctor</title>
+    <style>
+        body { font-family: monospace; padding: 2rem; background: #1e1e1e; color: #d4d4d4; }
+        .test { margin: 1rem 0; padding: 1rem; border: 1px solid #555; border-radius: 4px; }
+        .pass { background: #1e3a1e; border-color: #4caf50; }
+        .fail { background: #3a1e1e; border-color: #f44336; }
+        button { padding: 0.5rem 1rem; margin: 0.5rem 0.5rem 0.5rem 0; cursor: pointer; }
+        pre { background: #2d2d2d; padding: 0.5rem; border-radius: 4px; overflow-x: auto; }
+        .status { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🧪 SAFT Doctor - Smoke Test</h1>
+    <p>Testes rápidos para verificar funcionalidades básicas</p>
+
+    <div id="test-health" class="test">
+        <h3>1. Health Check</h3>
+        <button onclick="testHealth()">Executar</button>
+        <div class="status" id="health-status">Aguardando...</div>
+        <pre id="health-result"></pre>
+    </div>
+
+    <div id="test-login" class="test">
+        <h3>2. Login (dev/dev)</h3>
+        <button onclick="testLogin()">Executar</button>
+        <div class="status" id="login-status">Aguardando...</div>
+        <pre id="login-result"></pre>
+    </div>
+
+    <div id="test-auth-me" class="test">
+        <h3>3. Auth /me (requer token do teste anterior)</h3>
+        <button onclick="testAuthMe()">Executar</button>
+        <div class="status" id="authme-status">Aguardando...</div>
+        <pre id="authme-result"></pre>
+    </div>
+
+    <div id="test-ui" class="test">
+        <h3>4. UI carrega corretamente</h3>
+        <button onclick="testUI()">Executar</button>
+        <div class="status" id="ui-status">Aguardando...</div>
+        <pre id="ui-result"></pre>
+    </div>
+
+    <div id="test-js" class="test">
+        <h3>5. JavaScript carrega e funções existem</h3>
+        <button onclick="testJS()">Executar</button>
+        <div class="status" id="js-status">Aguardando...</div>
+        <pre id="js-result"></pre>
+    </div>
+
+    <div style="margin-top: 2rem;">
+        <button onclick="runAll()" style="background: #2563eb; color: white; font-size: 1.1rem; padding: 0.75rem 1.5rem;">
+            ▶️ Executar todos os testes
+        </button>
+    </div>
+
+    <script>
+        let globalToken = null;
+
+        async function testHealth() {
+            const statusEl = document.getElementById('health-status');
+            const resultEl = document.getElementById('health-result');
+            const testEl = document.getElementById('test-health');
+            
+            statusEl.textContent = 'Testando...';
+            testEl.className = 'test';
+            
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'ok') {
+                    statusEl.textContent = '✅ PASS';
+                    testEl.className = 'test pass';
+                } else {
+                    statusEl.textContent = '❌ FAIL';
+                    testEl.className = 'test fail';
+                }
+                
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                statusEl.textContent = '❌ FAIL - ' + error.message;
+                testEl.className = 'test fail';
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function testLogin() {
+            const statusEl = document.getElementById('login-status');
+            const resultEl = document.getElementById('login-result');
+            const testEl = document.getElementById('test-login');
+            
+            statusEl.textContent = 'Testando...';
+            testEl.className = 'test';
+            
+            try {
+                const formData = new URLSearchParams();
+                formData.append('username', 'dev');
+                formData.append('password', 'dev');
+                
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.access_token) {
+                    globalToken = data.access_token;
+                    statusEl.textContent = '✅ PASS - Token obtido';
+                    testEl.className = 'test pass';
+                } else {
+                    statusEl.textContent = '❌ FAIL';
+                    testEl.className = 'test fail';
+                }
+                
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                statusEl.textContent = '❌ FAIL - ' + error.message;
+                testEl.className = 'test fail';
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function testAuthMe() {
+            const statusEl = document.getElementById('authme-status');
+            const resultEl = document.getElementById('authme-result');
+            const testEl = document.getElementById('test-auth-me');
+            
+            if (!globalToken) {
+                statusEl.textContent = '⚠️ Execute o teste de login primeiro';
+                resultEl.textContent = 'Token não disponível';
+                return;
+            }
+            
+            statusEl.textContent = 'Testando...';
+            testEl.className = 'test';
+            
+            try {
+                const response = await fetch('/auth/me', {
+                    headers: {
+                        'Authorization': 'Bearer ' + globalToken
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.username) {
+                    statusEl.textContent = '✅ PASS - User: ' + data.username;
+                    testEl.className = 'test pass';
+                } else {
+                    statusEl.textContent = '❌ FAIL';
+                    testEl.className = 'test fail';
+                }
+                
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                statusEl.textContent = '❌ FAIL - ' + error.message;
+                testEl.className = 'test fail';
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function testUI() {
+            const statusEl = document.getElementById('ui-status');
+            const resultEl = document.getElementById('ui-result');
+            const testEl = document.getElementById('test-ui');
+            
+            statusEl.textContent = 'Testando...';
+            testEl.className = 'test';
+            
+            try {
+                const response = await fetch('/');
+                const html = await response.text();
+                
+                const checks = {
+                    'navbar existe': html.includes('class="navbar"'),
+                    'login-overlay existe': html.includes('id="login-overlay"'),
+                    'script app.js carrega': html.includes('/static/app.js'),
+                    'tabs existem': html.includes('data-tab="app"'),
+                };
+                
+                const allPass = Object.values(checks).every(v => v);
+                
+                if (allPass) {
+                    statusEl.textContent = '✅ PASS';
+                    testEl.className = 'test pass';
+                } else {
+                    statusEl.textContent = '❌ FAIL - Alguns elementos não encontrados';
+                    testEl.className = 'test fail';
+                }
+                
+                resultEl.textContent = 'Checks:\n' + JSON.stringify(checks, null, 2);
+            } catch (error) {
+                statusEl.textContent = '❌ FAIL - ' + error.message;
+                testEl.className = 'test fail';
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function testJS() {
+            const statusEl = document.getElementById('js-status');
+            const resultEl = document.getElementById('js-result');
+            const testEl = document.getElementById('test-js');
+            
+            statusEl.textContent = 'Testando...';
+            testEl.className = 'test';
+            
+            try {
+                const response = await fetch('/static/app.js');
+                const js = await response.text();
+                
+                const checks = {
+                    'doLogin existe': js.includes('window.doLogin ='),
+                    'loginUser existe': js.includes('window.loginUser ='),
+                    'validateWithJar existe': js.includes('window.validateWithJar ='),
+                    'logout existe': js.includes('window.logout ='),
+                    'updateNavbar existe': js.includes('window.updateNavbar ='),
+                    'localStorage usado': js.includes('localStorage.setItem'),
+                };
+                
+                const allPass = Object.values(checks).every(v => v);
+                
+                if (allPass) {
+                    statusEl.textContent = '✅ PASS';
+                    testEl.className = 'test pass';
+                } else {
+                    statusEl.textContent = '❌ FAIL - Algumas funções não encontradas';
+                    testEl.className = 'test fail';
+                }
+                
+                resultEl.textContent = 'Checks:\n' + JSON.stringify(checks, null, 2) + '\n\nTamanho JS: ' + js.length + ' bytes';
+            } catch (error) {
+                statusEl.textContent = '❌ FAIL - ' + error.message;
+                testEl.className = 'test fail';
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function runAll() {
+            await testHealth();
+            await new Promise(r => setTimeout(r, 500));
+            await testLogin();
+            await new Promise(r => setTimeout(r, 500));
+            await testAuthMe();
+            await new Promise(r => setTimeout(r, 500));
+            await testUI();
+            await new Promise(r => setTimeout(r, 500));
+            await testJS();
+        }
+    </script>
+</body>
+</html>

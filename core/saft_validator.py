@@ -10,7 +10,7 @@ def _local(tag: str) -> str:
     return tag
 
 
-def parse_xml(data: bytes) -> ET.Element:
+def parse_xml(data: bytes) -> Any:
     """Parse XML bytes safely and return root element.
 
     Raises:
@@ -19,7 +19,7 @@ def parse_xml(data: bytes) -> ET.Element:
     return ET.parse(io.BytesIO(data)).getroot()
 
 
-def extract_text(parent: ET.Element, name: str) -> Optional[str]:
+def extract_text(parent: Any, name: str) -> Optional[str]:
     """Find child by local-name and return its text, or None."""
     for child in parent:
         if _local(child.tag) == name:
@@ -27,7 +27,7 @@ def extract_text(parent: ET.Element, name: str) -> Optional[str]:
     return None
 
 
-def validate_saft(root: ET.Element) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def validate_saft(root: Any) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Validate a SAFT XML root element.
 
     Returns:
@@ -80,7 +80,7 @@ def validate_saft(root: ET.Element) -> Tuple[List[Dict[str, Any]], Dict[str, Any
     return issues, summary
 
 
-def extract_cli_params(root: ET.Element) -> Dict[str, Optional[str]]:
+def extract_cli_params(root: Any) -> Dict[str, Optional[str]]:
     """Extract parameters needed by FACTEMICLI.jar from the SAFT XML root.
 
     Returns keys: nif, year, month (all strings or None if missing).
