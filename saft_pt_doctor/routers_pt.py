@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
-SECRET_KEY = os.getenv("SECRET_KEY", "change_me")
+SECRET_KEY = (os.getenv("SECRET_KEY", "change_me") or "change_me").strip()
 ALGORITHM = "HS256"
 USER_NOT_FOUND = "User not found"
 UPLOAD_ROOT = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
