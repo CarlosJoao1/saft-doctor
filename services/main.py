@@ -31,6 +31,35 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+@app.on_event('startup')
+async def startup_cleanup():
+    """Cleanup old upload chunks on startup and log environment."""
+    import glob
+    import time
+    UPLOAD_ROOT = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
+    print(f"[STARTUP] UPLOAD_ROOT={UPLOAD_ROOT}")
+    try:
+        os.makedirs(UPLOAD_ROOT, mode=0o755, exist_ok=True)
+        print(f"[STARTUP] Upload directory ready: {UPLOAD_ROOT}")
+    except Exception as e:
+        print(f"[STARTUP] ERRO ao criar UPLOAD_ROOT: {e}")
+    # Cleanup old files (>1 hour)
+    try:
+        now = time.time()
+        pattern = os.path.join(UPLOAD_ROOT, '*')
+        removed = 0
+        for fpath in glob.glob(pattern):
+            try:
+                if os.path.isfile(fpath) and (now - os.path.getmtime(fpath)) > 3600:
+                    os.remove(fpath)
+                    removed += 1
+            except Exception:
+                pass
+        if removed > 0:
+            print(f"[STARTUP] Limpeza: removidos {removed} ficheiros antigos de upload")
+    except Exception as e:
+        print(f"[STARTUP] Erro na limpeza de uploads: {e}")
+
 
 class RegisterIn(BaseModel):
     username: str = Field(min_length=1)

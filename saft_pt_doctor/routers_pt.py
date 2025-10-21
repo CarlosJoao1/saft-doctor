@@ -16,6 +16,8 @@ import os.path
 import subprocess
 from pathlib import Path
 import asyncio
+import uuid
+import json
 try:
     from botocore.exceptions import ClientError  # type: ignore
 except Exception:  # pragma: no cover
@@ -27,6 +29,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 SECRET_KEY = os.getenv("SECRET_KEY", "change_me")
 ALGORITHM = "HS256"
 USER_NOT_FOUND = "User not found"
+UPLOAD_ROOT = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
+DEFAULT_CHUNK_SIZE = int(os.getenv('UPLOAD_CHUNK_SIZE', str(5*1024*1024)))  # 5MB
 
 
 def get_country(request: Request) -> str:
@@ -38,6 +42,20 @@ def get_country(request: Request) -> str:
 def _jar_path() -> str:
     # Centralize JAR path resolution to avoid duplicated literals
     return os.getenv('FACTEMICLI_JAR_PATH', '/opt/factemi/FACTEMICLI.jar')
+
+def _ensure_upload_root():
+    """Create UPLOAD_ROOT if missing and log to stdout for Render visibility."""
+    try:
+        os.makedirs(UPLOAD_ROOT, mode=0o755, exist_ok=True)
+        print(f"[UPLOAD] Diretório garantido: {UPLOAD_ROOT}")
+    except Exception as e:
+        print(f"[UPLOAD] ERRO ao criar {UPLOAD_ROOT}: {e}")
+        raise
+
+def _upload_paths(upload_id: str):
+    _ensure_upload_root()
+    base = os.path.join(UPLOAD_ROOT, upload_id)
+    return base + '.meta', base + '.bin'
 
 
 async def get_current_user(
@@ -119,6 +137,146 @@ async def save_at_secret(
         current["username"], encrypt(secret.username), encrypt(secret.password)
     )
     return ATSecretOut(ok=True)
+
+
+# --------------------------- Chunked Upload API ----------------------------
+@router.post('/upload/start')
+async def upload_start(request: Request, current=Depends(get_current_user)):
+    body = await request.json()
+    filename = body.get('filename') or 'upload.bin'
+    size = int(body.get('size') or 0)
+    upload_id = uuid.uuid4().hex
+    meta_path, bin_path = _upload_paths(upload_id)
+    print(f"[UPLOAD] START upload_id={upload_id}, filename={filename}, size={size}")
+    # prepare file using asyncio.to_thread for I/O
+    def _create_files():
+        with open(bin_path, 'wb') as f:
+            if size > 0:
+                f.truncate(size)
+        with open(meta_path, 'w', encoding='utf-8') as f:
+            json.dump({'upload_id': upload_id, 'filename': filename, 'size': size, 'bin_path': bin_path}, f)
+    try:
+        await asyncio.to_thread(_create_files)
+    except Exception as e:
+        print(f"[UPLOAD] ERRO ao preparar upload: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to prepare upload: {e}')
+    return { 'ok': True, 'upload_id': upload_id, 'chunk_size': DEFAULT_CHUNK_SIZE }
+
+
+@router.put('/upload/chunk')
+async def upload_chunk(request: Request, upload_id: str, index: int = 0, offset: int | None = None, current=Depends(get_current_user)):
+    meta_path, bin_path = _upload_paths(upload_id)
+    if not os.path.isfile(meta_path) or not os.path.isfile(bin_path):
+        raise HTTPException(status_code=404, detail='upload_id not found')
+    if offset is None:
+        offset = index * DEFAULT_CHUNK_SIZE
+    data = await request.body()
+    print(f"[UPLOAD] CHUNK {index} → offset={offset}, bytes={len(data)}")
+    def _write_chunk():
+        with open(bin_path, 'r+b') as f:
+            f.seek(offset)
+            f.write(data)
+    try:
+        await asyncio.to_thread(_write_chunk)
+    except Exception as e:
+        print(f"[UPLOAD] ERRO no chunk {index}: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to write chunk: {e}')
+    return { 'ok': True, 'bytes': len(data), 'offset': offset }
+
+
+@router.post('/upload/finish')
+async def upload_finish(request: Request, current=Depends(get_current_user)):
+    body = await request.json()
+    upload_id = body.get('upload_id')
+    if not upload_id:
+        raise HTTPException(status_code=400, detail='upload_id required')
+    meta_path, bin_path = _upload_paths(upload_id)
+    if not os.path.isfile(meta_path) or not os.path.isfile(bin_path):
+        raise HTTPException(status_code=404, detail='upload not found')
+    print(f"[UPLOAD] FINISH upload_id={upload_id}, path={bin_path}")
+    # Just respond OK; use next endpoint to trigger validation on server side
+    return { 'ok': True, 'upload_id': upload_id, 'path': bin_path }
+
+
+@router.post('/validate-jar-by-upload')
+async def validate_with_jar_by_upload(
+    request: Request,
+    upload_id: str,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+    operation: str = 'validar',
+    full: int = 0,
+):
+    # Locate uploaded file
+    meta_path, bin_path = _upload_paths(upload_id)
+    if not os.path.isfile(meta_path) or not os.path.isfile(bin_path):
+        raise HTTPException(status_code=404, detail='upload not found')
+    print(f"[VALIDATE] upload_id={upload_id}, operation={operation}, user={current['username']}")
+    # Reuse existing flow by reading XML and executing JAR (similar to by_key)
+    from core.saft_validator import parse_xml, extract_cli_params
+    try:
+        data = await asyncio.to_thread(lambda: open(bin_path, 'rb').read())
+    except Exception as e:
+        print(f"[VALIDATE] ERRO ao ler ficheiro: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to read upload: {e}')
+    try:
+        root = parse_xml(data)
+    except Exception as e:
+        return { 'ok': False, 'error': f'Invalid XML: {e}', 'jar_path': _jar_path() }
+    params = extract_cli_params(root)
+    nif = params.get('nif'); year = params.get('year'); month = params.get('month')
+    missing = [k for k in ['nif','year','month'] if not params.get(k)]
+    if missing:
+        return { 'ok': False, 'error': f"Missing fields in XML for CLI: {', '.join(missing)}" }
+    # Delegate to validate_with_jar_by_key-like local execution
+    # For brevity and to avoid duplication, call into the by_key implementation by mocking saft_path
+    # But here we inline minimal subset
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    u = await repo.get(current['username'])
+    if not u:
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
+    selected_pass = await _select_at_password(repo, current['username'], nif)
+    if not selected_pass and operation == 'enviar':
+        return { 'ok': False, 'error': f'Operation "enviar" requires AT password for NIF {nif}. Save it first.' }
+
+    # Build and run command (same TIMEOUT)
+    jar_path = _jar_path()
+    op = operation
+    if selected_pass:
+        cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op',op,'-i',bin_path]
+        safe_cmd = [ ('***' if part==selected_pass else part) for part in cmd ]
+    else:
+        cmd = ['java','-jar',jar_path,'-op','validar','-i',bin_path]
+        safe_cmd = list(cmd)
+    TIMEOUT = int(os.getenv('FACTEMICLI_TIMEOUT','300'))
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return { 'ok': False, 'timeout': True, 'cmd_masked': safe_cmd, 'jar_path': jar_path }
+        ok = (proc.returncode == 0)
+        stdout_str = stdout.decode() if stdout else ''
+        stderr_str = stderr.decode() if stderr else ''
+        # No archive here to keep response smaller; UI will handle like other endpoints
+        limit = 10000 if not full else None
+        def trunc(s: str) -> str:
+            if s is None: return ''
+            if limit is None: return s
+            return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
+        return {
+            'ok': ok,
+            'returncode': proc.returncode,
+            'stdout': trunc(stdout_str),
+            'stderr': trunc(stderr_str),
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': safe_cmd,
+            'jar_path': jar_path
+        }
+    except Exception as e:
+        return { 'ok': False, 'error': f'{e.__class__.__name__}: {e}' }
 
 
 @router.post('/secrets/at/entries', response_model=ATSecretOut)
