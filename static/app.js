@@ -157,12 +157,94 @@ window.validateSmart = async function() {
     if (state.objectKey) {
         return await validateFromB2();
     }
-    // Caso contrário, tenta presign e depois valida
-    await presignUpload();
-    if (state.objectKey) {
-        await validateFromB2();
-    } else {
-        setStatus('❌ Não foi possível obter object_key. Verifique o upload.', 'error');
+    // Caso contrário, faça upload chunked para o servidor e valide
+    const btnValidar = document.getElementById('btn-validate');
+    const btnJar = document.getElementById('btn-jar');
+    const btnB2 = document.getElementById('btn-b2');
+    try {
+        const fI = document.getElementById('file');
+        if (!fI.files.length) { setStatus('⚠️ Escolha um ficheiro XML primeiro', 'error'); return; }
+        const f = fI.files[0];
+        // Bloqueia botões durante upload
+        if (btnValidar) btnValidar.disabled = true;
+        if (btnJar) btnJar.disabled = true;
+        if (btnB2) btnB2.disabled = true;
+        // Iniciar progress bar
+        const prog = document.getElementById('upload-progress');
+        const progBar = document.getElementById('upload-progress-bar');
+        const progText = document.getElementById('upload-progress-text');
+        if (prog) prog.style.display = 'block';
+        if (progBar) progBar.style.width = '0%';
+        if (progText) progText.textContent = '0%';
+        logLine('📤 Iniciando upload segmentado...');
+        setStatus('📤 A enviar ficheiro em chunks...', 'info');
+        // start
+        const startRes = await fetch('/pt/upload/start', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+            body: JSON.stringify({ filename: f.name, size: f.size })
+        });
+        if (!startRes.ok) {
+            const errText = await startRes.text();
+            throw new Error(`Falha no upload/start (${startRes.status}): ${errText}`);
+        }
+        const start = await startRes.json();
+        if (!start.upload_id) throw new Error('Sem upload_id na resposta');
+        const uploadId = start.upload_id;
+        const chunkSize = start.chunk_size || (5 * 1024 * 1024);
+        logLine(`✅ Upload iniciado: id=${uploadId}, chunk=${Math.round(chunkSize/1024)}KB`);
+        let sent = 0; let index = 0;
+        const totalChunks = Math.ceil(f.size / chunkSize);
+        while (sent < f.size) {
+            const slice = f.slice(sent, Math.min(sent + chunkSize, f.size));
+            const buf = await slice.arrayBuffer();
+            logLine(`📦 Enviando chunk ${index+1}/${totalChunks} (${Math.round(slice.size/1024)}KB)...`);
+            const putRes = await fetch(`/pt/upload/chunk?upload_id=${uploadId}&index=${index}`, {
+                method: 'PUT', headers: { 'Authorization': 'Bearer ' + state.token }, body: buf
+            });
+            if (!putRes.ok) {
+                const errText = await putRes.text();
+                throw new Error(`Falha no chunk ${index} (${putRes.status}): ${errText}`);
+            }
+            sent += slice.size; index++;
+            const pct = Math.round((sent / f.size) * 100);
+            if (progBar) progBar.style.width = pct + '%';
+            if (progText) progText.textContent = pct + '%';
+        }
+        logLine(`✅ Upload 100% completo (${totalChunks} chunks)`);
+        const finishRes = await fetch('/pt/upload/finish', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+            body: JSON.stringify({ upload_id: uploadId })
+        });
+        if (!finishRes.ok) {
+            const errText = await finishRes.text();
+            throw new Error(`Falha no upload/finish (${finishRes.status}): ${errText}`);
+        }
+        logLine('🔍 A validar ficheiro no servidor...');
+        setStatus('🔍 A validar ficheiro...', 'info');
+        // validate via upload
+        const vres = await fetch(`/pt/validate-jar-by-upload?upload_id=${uploadId}&operation=validar&full=1`, { headers: { 'Authorization': 'Bearer ' + state.token }, method: 'POST' });
+        const txt = await vres.text();
+        let data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch(_e){ /* ignore */ }
+        const out = document.getElementById('out');
+        if (out) out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
+        const cmdEl = document.getElementById('cmd_mask');
+        if (data?.cmd_masked?.join) cmdEl.textContent = data.cmd_masked.join(' ');
+        if (vres.ok) {
+            logLine('✅ Validação concluída com sucesso.');
+            setStatus('✅ Validação concluída (upload chunked).', 'success');
+        } else {
+            logLine('❌ Validação falhou: ' + (data?.error || vres.statusText));
+            setStatus('❌ Erro na validação', 'error');
+        }
+    } catch (e) {
+        setStatus('❌ Erro na validação por upload: ' + e.message, 'error');
+        logLine('❌ Erro validação upload: ' + e.message);
+    } finally {
+        // Desbloqueia botões
+        if (btnValidar) btnValidar.disabled = false;
+        if (btnJar) btnJar.disabled = false;
+        if (btnB2) btnB2.disabled = false;
     }
 };
 
