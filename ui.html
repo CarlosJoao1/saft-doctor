@@ -351,7 +351,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=42"></script>
+    <script src="/static/app.js?v=43"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -373,20 +373,52 @@
     <!-- Login overlay (aparece quando não está autenticado) -->
     <div class="login-overlay" id="login-overlay">
         <div class="login-card">
-            <h2>🔐 Autenticação</h2>
-            <div class="form-group">
-                <label class="form-label">Username</label>
-                <input type="text" id="login_user" placeholder="dev" value="dev" />
+            <h2 style="margin-bottom: 1.5rem;">🔐 Autenticação</h2>
+
+            <!-- Tabs para Login / Registar -->
+            <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn" id="login-tab-btn" onclick="showAuthTab('login')" style="flex: 1;">🔓 Login</button>
+                <button class="btn" id="register-tab-btn" onclick="showAuthTab('register')" style="flex: 1; background: var(--text-secondary);">✍️ Registar</button>
             </div>
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" id="login_pass" placeholder="dev" value="dev" />
+
+            <!-- Login Form -->
+            <div id="login-form" style="display: block;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="login_user" placeholder="dev" value="dev" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="login_pass" placeholder="dev" value="dev" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="doLogin()">🔓 Entrar</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Utilize <strong>dev/dev</strong> para acesso rápido
+                </div>
             </div>
-            <div class="btn-group" style="margin-top: 1rem;">
-                <button class="btn" onclick="doLogin()">🔓 Entrar</button>
-            </div>
-            <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                Utilize <strong>dev/dev</strong> para acesso rápido
+
+            <!-- Register Form -->
+            <div id="register-form" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="register_user" placeholder="username" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="register_pass" placeholder="password" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar Password</label>
+                    <input type="password" id="register_pass_confirm" placeholder="confirme a password" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="doRegister()">✍️ Criar Conta</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Após registar, faça login com as suas credenciais
+                </div>
             </div>
         </div>
     </div>
