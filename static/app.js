@@ -6,11 +6,22 @@ window.state = { token: null, objectKey: null, file: null, username: null };
 try {
     const saved = localStorage.getItem('saft_token');
     const savedUser = localStorage.getItem('saft_username');
+    console.log('[DEBUG] Startup: Loading token from localStorage');
+    console.log('[DEBUG] Startup: Token found?', !!saved);
+    console.log('[DEBUG] Startup: Token length:', saved?.length);
+    console.log('[DEBUG] Startup: Token preview:', saved?.substring(0, 50));
+    console.log('[DEBUG] Startup: Username:', savedUser);
+
     if (saved) {
         window.state.token = saved;
         window.state.username = savedUser || 'Utilizador';
+        console.log('[DEBUG] Startup: Token loaded into state');
+    } else {
+        console.log('[DEBUG] Startup: NO TOKEN in localStorage, user needs to login');
     }
-} catch (_) {}
+} catch (err) {
+    console.error('[DEBUG] Startup: Error loading from localStorage:', err);
+}
 
 // Utilities
 window.setStatus = function(msg, type = 'info') {
@@ -152,7 +163,15 @@ window.presignUpload = async function() {
 
 // Validação inteligente: usa B2 se disponível; senão, faz upload via Presign e depois valida do B2
 window.validateSmart = async function() {
-    if (!state.token) { setStatus('⚠️ Faça login primeiro', 'error'); return; }
+    console.log('[DEBUG] validateSmart: state.token exists?', !!state.token);
+    console.log('[DEBUG] validateSmart: state.token (first 50 chars):', state.token?.substring(0, 50));
+
+    if (!state.token) {
+        console.error('[DEBUG] validateSmart: NO TOKEN! User needs to login');
+        setStatus('⚠️ Faça login primeiro', 'error');
+        return;
+    }
+
     // Se já temos object_key, validar do B2 diretamente
     if (state.objectKey) {
         return await validateFromB2();
@@ -178,13 +197,20 @@ window.validateSmart = async function() {
         if (progText) progText.textContent = '0%';
         logLine('📤 Iniciando upload segmentado...');
         setStatus('📤 A enviar ficheiro em chunks...', 'info');
+
+        console.log('[DEBUG] validateSmart: Sending upload/start request with token');
+
         // start
         const startRes = await fetch('/pt/upload/start', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
             body: JSON.stringify({ filename: f.name, size: f.size })
         });
+
+        console.log('[DEBUG] validateSmart: upload/start response status:', startRes.status);
+
         if (!startRes.ok) {
             const errText = await startRes.text();
+            console.error('[DEBUG] validateSmart: upload/start FAILED:', errText);
             throw new Error(`Falha no upload/start (${startRes.status}): ${errText}`);
         }
         const start = await startRes.json();
@@ -230,6 +256,29 @@ window.validateSmart = async function() {
         if (out) out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
         const cmdEl = document.getElementById('cmd_mask');
         if (data?.cmd_masked?.join) cmdEl.textContent = data.cmd_masked.join(' ');
+        // Store last upload id for fixes
+        window.state.lastUploadId = uploadId;
+
+        // DEBUG: Log validation response
+        console.log('================================================================================');
+        console.log('[DEBUG] validateSmart: Validation response received');
+        console.log('  data.ok:', data?.ok);
+        console.log('  data.returncode:', data?.returncode);
+        console.log('  data.issues:', data?.issues);
+        console.log('  data.issues length:', data?.issues?.length);
+        console.log('  Full data:', data);
+        console.log('================================================================================');
+
+        try {
+            if (data && Array.isArray(data.issues) && data.issues.length > 0) {
+                console.log('[DEBUG] validateSmart: Showing popup with', data.issues.length, 'issues');
+                window.showIssuesPopup(data.issues);
+            } else {
+                console.log('[DEBUG] validateSmart: No issues to show (ok=' + data?.ok + ')');
+            }
+        } catch(err) {
+            console.error('[DEBUG] validateSmart: Error showing popup:', err);
+        }
         // Append detailed JAR results to execution log
         try {
             if (data) {
@@ -253,12 +302,42 @@ window.validateSmart = async function() {
                 logLine('raw: ' + (txt.length > 2000 ? (txt.slice(0,2000)+'... [truncated]') : txt));
             }
         } catch(_) {}
-        if (vres.ok) {
+        if (data && data.ok) {
             logLine('✅ Validação concluída com sucesso.');
             setStatus('✅ Validação concluída (upload chunked).', 'success');
+
+            // Log B2 storage info if available
+            if (data.save_error) {
+                logLine('⚠️ AVISO: Erro ao guardar no histórico');
+                logLine(`   Erro: ${data.save_error}`);
+                console.error('[SAVE] Error saving to B2/history:', data.save_error);
+            } else if (data.storage_key) {
+                logLine('💾 Ficheiro guardado no histórico');
+                logLine(`   Storage key: ${data.storage_key}`);
+                if (data.validation_id) {
+                    logLine(`   Validation ID: ${data.validation_id}`);
+                }
+            } else {
+                logLine('⚠️ AVISO: Ficheiro NÃO foi guardado no histórico (sem storage_key)');
+                console.warn('[SAVE] No storage_key in response - file was not saved');
+            }
+
+            // Mostrar botão de enviar
+            const submitPhase = document.getElementById('submit-phase');
+            if (submitPhase) {
+                submitPhase.style.display = 'block';
+                logLine('');
+                logLine('✨ FICHEIRO PRONTO PARA ENVIO À AT!');
+                logLine('   Clique no botão "2. Enviar à Autoridade Tributária" para submeter.');
+                logLine('   Ou vá ao separador "📜 Histórico" para ver validações anteriores.');
+            }
         } else {
             logLine('❌ Validação falhou: ' + (data?.error || vres.statusText));
             setStatus('❌ Erro na validação', 'error');
+
+            // Esconder botão de enviar
+            const submitPhase = document.getElementById('submit-phase');
+            if (submitPhase) submitPhase.style.display = 'none';
         }
     } catch (e) {
         setStatus('❌ Erro na validação por upload: ' + e.message, 'error');
@@ -269,6 +348,343 @@ window.validateSmart = async function() {
         if (btnJar) btnJar.disabled = false;
         if (btnB2) btnB2.disabled = false;
     }
+};
+
+// Popup to show structured issues and suggestions
+window.showIssuesPopup = function(issues) {
+    console.log('================================================================================');
+    console.log('[DEBUG] *** showIssuesPopup CALLED ***');
+    console.log('[DEBUG] Number of issues:', issues?.length);
+    console.log('[DEBUG] Issues array:', issues);
+
+    // Log details of each issue
+    if (issues && issues.length > 0) {
+        issues.forEach((issue, idx) => {
+            console.log(`[DEBUG] Issue ${idx}:`, {
+                code: issue.code,
+                message: issue.message?.substring(0, 100),
+                hasSuggestion: !!issue.suggestion,
+                hasSuggestions: !!issue.suggestions,
+                suggestionsCount: issue.suggestions?.length || 0,
+                location: issue.location
+            });
+        });
+    }
+    console.log('================================================================================');
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '9999';
+    // Modal
+    const modal = document.createElement('div');
+    modal.style.position = 'absolute';
+    modal.style.top = '50%';
+    modal.style.left = '50%';
+    modal.style.transform = 'translate(-50%, -50%)';
+    modal.style.background = '#fff';
+    modal.style.color = '#111';
+    modal.style.borderRadius = '8px';
+    modal.style.maxWidth = '900px';
+    modal.style.width = '90%';
+    modal.style.maxHeight = '80%';
+    modal.style.overflow = 'auto';
+    modal.style.boxShadow = '0 10px 30px rgba(0,0,0,0.3)';
+    modal.style.padding = '16px';
+
+    const title = document.createElement('div');
+    title.innerHTML = '<h2 style="margin:0 0 8px 0;">Erros detetados</h2><div style="color:#555;margin-bottom:8px;">Sugestões automáticas quando possível</div>';
+    modal.appendChild(title);
+
+    const list = document.createElement('div');
+    issues.forEach((it, idx) => {
+        const card = document.createElement('div');
+        card.style.border = '1px solid #e5e7eb';
+        card.style.borderRadius = '6px';
+        card.style.padding = '10px';
+        card.style.marginBottom = '8px';
+        const code = (it.code || 'JAR_ERROR');
+        const msg = (it.message || '').toString();
+        const loc = it.location || {};
+        const cid = it.customer_id || '';
+        const suggestion = it.suggestion || null;
+        const suggestions = it.suggestions || null; // Array of multiple suggestions
+        const line = (loc.line != null ? `L${loc.line}` : '(linha desconhecida)');
+        const ctx = loc.context ? `<pre style="white-space:pre-wrap;background:#f8fafc;border-radius:6px;padding:8px;">${loc.context}</pre>` : '';
+
+        // Handle single suggestion (backwards compatible)
+        let sugHtml = suggestion ? `<div style="margin-top:6px;"><b>Sugestão:</b> substituir por <code>${suggestion}</code>${cid?` no cliente <code>${cid}</code>`:''}</div>` : '';
+
+        // JAR_ERROR with no suggestion - show "Create Rule" button
+        if (code === 'JAR_ERROR' && !suggestion && !suggestions) {
+            sugHtml = `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="window.showCreateRuleModal(${idx}, '${encodeURIComponent(msg)}')">📝 Criar regra para este erro</button></div>`;
+        }
+
+        // Handle multiple suggestions
+        if (suggestions && Array.isArray(suggestions) && suggestions.length > 0) {
+            sugHtml = '<div style="margin-top:8px;"><b>Opções de correção:</b></div>';
+            sugHtml += '<div style="margin-top:4px;">';
+            suggestions.forEach((sug, sidx) => {
+                const radioId = `sug-${idx}-${sidx}`;
+                const checked = sidx === 0 ? 'checked' : ''; // Select first option by default
+                sugHtml += `
+                    <div style="margin:4px 0;">
+                        <label style="display:flex;align-items:start;cursor:pointer;">
+                            <input type="radio" name="suggestion-${idx}" id="${radioId}" value="${sidx}" ${checked} style="margin-top:4px;margin-right:8px;">
+                            <div>
+                                <div style="font-weight:500;">${sug.label}</div>
+                                <div style="font-size:0.9em;color:#666;">Reason: ${sug.reason}</div>
+                                <div style="font-size:0.9em;color:#666;">Code: <code>${sug.code}</code></div>
+                            </div>
+                        </label>
+                    </div>
+                `;
+            });
+            sugHtml += '</div>';
+            // Store selected suggestion index in card dataset
+            card.dataset.selectedSuggestionIndex = '0';
+            card.querySelectorAll = () => card.getElementsByTagName('*');
+            setTimeout(() => {
+                const radios = card.querySelectorAll(`input[name="suggestion-${idx}"]`);
+                for (let radio of radios) {
+                    radio.addEventListener('change', (e) => {
+                        card.dataset.selectedSuggestionIndex = e.target.value;
+                    });
+                }
+            }, 100);
+        }
+
+        card.innerHTML = `
+            <div style="font-weight:600;">${idx+1}. ${code}</div>
+            <div style="color:#222;margin-top:4px;">${msg}</div>
+            <div style="color:#666;margin-top:4px;">${line}</div>
+            ${ctx}
+            ${sugHtml}
+        `;
+
+        // Re-attach event listeners after innerHTML (since innerHTML destroys them)
+        if (suggestions && Array.isArray(suggestions) && suggestions.length > 0) {
+            card.dataset.selectedSuggestionIndex = '0';
+            setTimeout(() => {
+                const radios = card.querySelectorAll(`input[name="suggestion-${idx}"]`);
+                for (let radio of radios) {
+                    radio.addEventListener('change', (e) => {
+                        card.dataset.selectedSuggestionIndex = e.target.value;
+                    });
+                }
+            }, 50);
+        }
+
+        list.appendChild(card);
+    });
+    modal.appendChild(list);
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.justifyContent = 'flex-end';
+    actions.style.gap = '8px';
+    actions.style.marginTop = '8px';
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn';
+    applyBtn.textContent = 'Aplicar sugestões e revalidar';
+    applyBtn.onclick = async () => {
+        console.log('[DEBUG] ========================================');
+        console.log('[DEBUG] Apply button clicked!');
+        console.log('[DEBUG] ========================================');
+        try {
+            const uploadId = (window.state && window.state.lastUploadId) || null;
+            console.log('[DEBUG] uploadId:', uploadId);
+            if (!uploadId) { alert('Sem upload_id disponível'); return; }
+
+            // Prepare fixes: handle both single suggestion and multiple suggestions
+            const fixes = [];
+            const cards = list.querySelectorAll('div[style*="border"]');
+            console.log('[DEBUG] Found', cards.length, 'cards');
+            console.log('[DEBUG] Processing', issues.length, 'issues');
+
+            issues.forEach((it, idx) => {
+                console.log(`[DEBUG] Issue ${idx}:`, it.code, 'has suggestion?', !!it.suggestion, 'has suggestions?', !!it.suggestions);
+
+                if (it.suggestion) {
+                    // Single suggestion (backwards compatible)
+                    fixes.push(it);
+                    console.log(`[DEBUG] Added single suggestion fix for issue ${idx}`);
+                } else if (it.suggestions && Array.isArray(it.suggestions) && it.suggestions.length > 0) {
+                    // Multiple suggestions - get selected option
+                    const card = cards[idx];
+                    const selectedIdx = parseInt(card?.dataset?.selectedSuggestionIndex || '0');
+                    const selectedSug = it.suggestions[selectedIdx];
+                    console.log(`[DEBUG] Issue ${idx}: selected index=${selectedIdx}, suggestion:`, selectedSug);
+                    // Create fix object with selected suggestion
+                    fixes.push({
+                        ...it,
+                        selected_suggestion: selectedSug
+                    });
+                    console.log(`[DEBUG] Added multi-suggestion fix for issue ${idx}`);
+                } else {
+                    console.log(`[DEBUG] Issue ${idx}: No fixable suggestions`);
+                }
+            });
+
+            console.log('[DEBUG] Total fixes prepared:', fixes.length);
+            if (fixes.length === 0) {
+                console.log('[DEBUG] No fixes to apply, showing alert');
+                alert('Sem sugestões automáticas a aplicar');
+                return;
+            }
+
+            console.log('[DEBUG] About to send fixes to backend...');
+            setStatus('🔧 A aplicar sugestões...', 'info');
+            logLine(`[APPLY] A aplicar ${fixes.length} sugestões...`);
+            const r = await fetch('/pt/upload/apply-fixes-and-validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+                },
+                body: JSON.stringify({ upload_id: uploadId, fixes })
+            });
+            const txt = await r.text();
+            console.log('[DEBUG] apply-fixes response status:', r.status);
+            console.log('[DEBUG] apply-fixes response text length:', txt.length);
+
+            let data = null;
+            try {
+                data = txt ? JSON.parse(txt) : null;
+                console.log('[DEBUG] apply-fixes parsed data:', data);
+            } catch(parseErr) {
+                console.error('[DEBUG] Error parsing response:', parseErr);
+                console.error('[DEBUG] Response text:', txt);
+            }
+
+            const out = document.getElementById('out');
+            if (out) out.textContent = data ? JSON.stringify(data, null, 2) : (txt || '(sem resposta)');
+
+            console.log('[DEBUG] About to close overlay...');
+            // IMPORTANT: Close current popup FIRST, then show new one
+            try {
+                if (overlay && overlay.parentNode) {
+                    document.body.removeChild(overlay);
+                    console.log('[DEBUG] Overlay removed successfully');
+                }
+            } catch (removeErr) {
+                console.error('[DEBUG] Error removing overlay:', removeErr);
+            }
+
+            console.log('[DEBUG] Checking response: data.issues?', data?.issues?.length, 'data.ok?', data?.ok);
+            // Check response and show appropriate feedback
+            if (data && Array.isArray(data.issues) && data.issues.length > 0) {
+                // Show new issues in NEW popup
+                console.log('[DEBUG] Showing new popup with', data.issues.length, 'issues');
+                setStatus(`🔧 ${data.applied || 0} correções aplicadas. ${data.issues.length} erros restantes.`, 'info');
+                logLine(`🔧 ${data.applied || 0} correções aplicadas. ${data.issues.length} erros restantes.`);
+                window.showIssuesPopup(data.issues);
+            } else if (data && data.ok) {
+                console.log('[DEBUG] No more errors! File is ready.');
+                setStatus('✅ Sem erros após correções! Ficheiro pronto.', 'success');
+                logLine('✅ Sem erros após correções! Ficheiro pronto para enviar.');
+                // Show submit button
+                const submitPhase = document.getElementById('submit-phase');
+                if (submitPhase) submitPhase.style.display = 'block';
+            } else {
+                console.log('[DEBUG] Unexpected response state');
+                console.log('[DEBUG] data:', data);
+                setStatus('⚠️ Verifique resultado após correções', 'warning');
+                logLine('⚠️ Resposta inesperada após correções. Verifique o output.');
+            }
+        } catch (e) {
+            console.error('[DEBUG] Error applying fixes:', e);
+            alert('Erro a aplicar sugestões: ' + e.message);
+            // Try to close popup on error
+            try {
+                if (overlay && overlay.parentNode) {
+                    document.body.removeChild(overlay);
+                }
+            } catch(_) {}
+        }
+    };
+    actions.appendChild(applyBtn);
+
+    // "Apply All Automatically" button - loops until no more fixable errors
+    const applyAllBtn = document.createElement('button');
+    applyAllBtn.className = 'btn btn-warning';
+    applyAllBtn.textContent = '🔁 Aplicar TUDO Automaticamente';
+    applyAllBtn.title = 'Aplica todas as correções repetidamente até não haver mais erros';
+    applyAllBtn.onclick = async () => {
+        console.log('[DEBUG] Auto-fix button clicked!');
+        const uploadId = (window.state && window.state.lastUploadId) || null;
+        if (!uploadId) {
+            alert('Sem upload_id disponível');
+            return;
+        }
+
+        // Close current popup
+        console.log('[DEBUG] Closing issues popup...');
+        document.body.removeChild(overlay);
+
+        // Create custom confirmation modal instead of using browser confirm()
+        console.log('[DEBUG] Creating confirmation modal...');
+        const confirmOverlay = document.createElement('div');
+        confirmOverlay.style.position = 'fixed';
+        confirmOverlay.style.inset = '0';
+        confirmOverlay.style.background = 'rgba(0,0,0,0.6)';
+        confirmOverlay.style.zIndex = '10000';
+        confirmOverlay.style.display = 'flex';
+        confirmOverlay.style.alignItems = 'center';
+        confirmOverlay.style.justifyContent = 'center';
+
+        const confirmModal = document.createElement('div');
+        confirmModal.style.background = '#fff';
+        confirmModal.style.color = '#111';
+        confirmModal.style.borderRadius = '8px';
+        confirmModal.style.padding = '24px';
+        confirmModal.style.maxWidth = '500px';
+        confirmModal.style.boxShadow = '0 10px 30px rgba(0,0,0,0.3)';
+
+        confirmModal.innerHTML = `
+            <h3 style="margin:0 0 16px 0;">🔁 Auto-Fix Automático</h3>
+            <p style="margin:0 0 16px 0;">Após corrigir todos os erros automaticamente, deseja <strong>ENVIAR</strong> o ficheiro para a AT?</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button id="confirm-no" class="btn btn-secondary">Não - Apenas Corrigir</button>
+                <button id="confirm-yes" class="btn" style="background:#28a745;border-color:#28a745;">Sim - Corrigir + Enviar</button>
+            </div>
+        `;
+
+        confirmOverlay.appendChild(confirmModal);
+        document.body.appendChild(confirmOverlay);
+
+        console.log('[DEBUG] Confirmation modal added to DOM');
+
+        // Handle button clicks
+        document.getElementById('confirm-yes').onclick = () => {
+            console.log('[DEBUG] User selected: YES (fix + submit)');
+            document.body.removeChild(confirmOverlay);
+            window.autoFixLoop(uploadId, 20, true);
+        };
+
+        document.getElementById('confirm-no').onclick = () => {
+            console.log('[DEBUG] User selected: NO (fix only)');
+            document.body.removeChild(confirmOverlay);
+            window.autoFixLoop(uploadId, 20, false);
+        };
+    };
+    actions.appendChild(applyAllBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn';
+    closeBtn.textContent = 'Fechar';
+    closeBtn.onclick = () => document.body.removeChild(overlay);
+    actions.appendChild(closeBtn);
+    modal.appendChild(actions);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
+    document.body.appendChild(overlay);
+
+    console.log('[DEBUG] showIssuesPopup: Popup added to DOM, z-index=9999');
 };
 
 window.updateNavbar = function() {
@@ -628,7 +1044,7 @@ window.validateFromB2 = async function() {
 };
 
 // Nova função: Enviar ficheiro à AT (Fase 2)
-window.submitToAT = async function() {
+window.submitToAT = async function(uploadId) {
     if (!state.token) {
         setStatus('⚠️ Faça login primeiro', 'error');
         return;
@@ -636,29 +1052,45 @@ window.submitToAT = async function() {
     const fI = document.getElementById('file');
     const out = document.getElementById('out');
     const cmdEl = document.getElementById('cmd_mask');
-    
-    if (!fI.files.length) {
-        setStatus('⚠️ Escolha um ficheiro XML primeiro', 'error');
-        return;
-    }
-    
+
+    // Check if we have an upload_id (from chunked upload) or need to use direct file upload
+    const useUploadId = uploadId || (window.state && window.state.lastUploadId);
+
     setStatus(`📨 A enviar ficheiro à AT via FACTEMICLI.jar...`, 'info');
     logLine('========================================');
     logLine(`📨 ENVIO À AT - Operação: ENVIAR`);
     logLine('========================================');
-    const f = fI.files[0];
-    const fd = new FormData();
-    fd.append('file', f);
-    
-    // Usa operação 'enviar' (fase 2)
-    const url = `/pt/validate-jar?full=1&operation=enviar`;
-    
-    try {
-        const r = await fetch(url, {
+
+    let url, fetchOptions;
+
+    if (useUploadId) {
+        // Use chunked upload endpoint
+        logLine(`[SUBMIT] Usando upload_id: ${useUploadId}`);
+        url = `/pt/validate-jar-by-upload?upload_id=${useUploadId}&operation=enviar&full=1`;
+        fetchOptions = {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        };
+    } else {
+        // Fallback to direct file upload
+        if (!fI.files.length) {
+            setStatus('⚠️ Escolha um ficheiro XML primeiro', 'error');
+            return;
+        }
+        logLine(`[SUBMIT] Usando upload direto do ficheiro`);
+        const f = fI.files[0];
+        const fd = new FormData();
+        fd.append('file', f);
+        url = `/pt/validate-jar?full=1&operation=enviar`;
+        fetchOptions = {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + state.token },
             body: fd
-        });
+        };
+    }
+
+    try {
+        const r = await fetch(url, fetchOptions);
         const txt = await r.text();
         let data = null;
         try {
@@ -906,13 +1338,19 @@ window.loginUser = async function() {
         if (!r.ok) throw new Error(j.detail || 'Login falhou');
         state.token = j.access_token;
         state.username = u;
-        
+
+        console.log('[DEBUG] loginUser: Token received, length:', state.token?.length);
+        console.log('[DEBUG] loginUser: Token preview:', state.token?.substring(0, 50));
+
         // Guardar no localStorage
         try {
             localStorage.setItem('saft_token', state.token);
             localStorage.setItem('saft_username', state.username);
-        } catch (_) {}
-        
+            console.log('[DEBUG] loginUser: Token saved to localStorage');
+        } catch (err) {
+            console.error('[DEBUG] loginUser: Failed to save to localStorage:', err);
+        }
+
         updateNavbar();
         setStatus('✅ Login efetuado: ' + u, 'success');
         logLine('Login OK: ' + u);
@@ -1057,6 +1495,162 @@ window.loadNifEntries = async function() {
     }
 };
 
+window.loadNifEntriesTable = async function() {
+    if (!state.token) {
+        alert('Faça login primeiro');
+        return;
+    }
+
+    const loading = document.getElementById('creds-loading');
+    const empty = document.getElementById('creds-empty');
+    const results = document.getElementById('creds-results');
+
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    results.style.display = 'none';
+
+    try {
+        const response = await fetch('/pt/secrets/at/entries-full', {
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao carregar credenciais');
+        }
+
+        const data = await response.json();
+        loading.style.display = 'none';
+
+        if (!data.items || data.items.length === 0) {
+            empty.style.display = 'block';
+            return;
+        }
+
+        renderCredsTable(data.items);
+        results.style.display = 'block';
+
+    } catch (err) {
+        loading.style.display = 'none';
+        alert('❌ Erro ao carregar credenciais: ' + err.message);
+    }
+};
+
+window.renderCredsTable = function(items) {
+    const tbody = document.getElementById('creds-table-body');
+    tbody.innerHTML = '';
+
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid var(--border)';
+
+        const updatedDate = item.updated_at ? new Date(item.updated_at).toLocaleString('pt-PT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }) : '-';
+
+        row.innerHTML = `
+            <td style="padding: 0.75rem; font-family: monospace;">${item.ident}</td>
+            <td style="padding: 0.75rem;">
+                <input type="password" value="${item.password}" readonly
+                       style="width: 100%; padding: 0.25rem; border: 1px solid var(--border); border-radius: 4px;"
+                       id="pass-${item.ident}">
+            </td>
+            <td style="padding: 0.75rem;">${updatedDate}</td>
+            <td style="padding: 0.75rem; text-align: center;">
+                <div style="display: flex; gap: 4px; justify-content: center;">
+                    <button class="btn btn-secondary btn-sm" onclick="togglePasswordVisibility('${item.ident}')">👁️ Ver</button>
+                    <button class="btn btn-sm" style="background:#ffc107;border-color:#ffc107;color:#000;" onclick="editCredential('${item.ident}')">✏️ Editar</button>
+                    <button class="btn btn-sm" style="background:#dc3545;border-color:#dc3545;color:white;" onclick="deleteCredential('${item.ident}')">🗑️ Eliminar</button>
+                </div>
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    });
+};
+
+window.togglePasswordVisibility = function(nif) {
+    const input = document.getElementById(`pass-${nif}`);
+    if (input.type === 'password') {
+        input.type = 'text';
+    } else {
+        input.type = 'password';
+    }
+};
+
+window.editCredential = function(nif) {
+    const input = document.getElementById(`pass-${nif}`);
+    const newPassword = prompt('Nova password AT para NIF ' + nif + ':', input.value);
+
+    if (newPassword && newPassword.trim()) {
+        document.getElementById('nif_ident').value = nif;
+        document.getElementById('nif_pass').value = newPassword.trim();
+        saveNifEntry();
+    }
+};
+
+window.deleteCredential = async function(nif) {
+    if (!confirm(`Tem a certeza que deseja eliminar as credenciais do NIF ${nif}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/pt/secrets/at/entry/' + encodeURIComponent(nif), {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Erro ao eliminar');
+        }
+
+        logLine(`✅ Credencial eliminada: NIF ${nif}`);
+        loadNifEntriesTable();
+
+    } catch (err) {
+        alert('❌ Erro ao eliminar credencial: ' + err.message);
+    }
+};
+
+window.deleteHistoryRecord = async function(recordId) {
+    if (!confirm('Tem a certeza que deseja eliminar este registo do histórico?\n\nIsto irá eliminar:\n- O registo da base de dados\n- O ficheiro ZIP do Backblaze B2')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/pt/validation-history/' + recordId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Erro ao eliminar');
+        }
+
+        // Check if B2 deletion was successful
+        if (data.b2_deleted) {
+            logLine(`✅ Registo eliminado do histórico (incluindo ficheiro B2)`);
+        } else if (data.b2_warning) {
+            logLine(`⚠️ Registo eliminado mas aviso B2: ${data.b2_warning}`);
+            alert(`⚠️ Aviso:\n${data.b2_warning}`);
+        } else {
+            logLine(`✅ Registo eliminado do histórico (sem ficheiro B2 associado)`);
+        }
+
+        loadHistory(0);
+
+    } catch (err) {
+        alert('❌ Erro ao eliminar registo: ' + err.message);
+    }
+};
+
 window.presignDownload = async function() {
     if (!state.token) {
         setStatus('⚠️ Faça login primeiro', 'error');
@@ -1139,18 +1733,23 @@ window.loadHistory = async function(skip = 0) {
         }
         
         const data = await response.json();
-        
+
+        console.log('[HISTORY] Response data:', data);
+        logLine(`[HISTORY] Recebidos ${data.records?.length || 0} registos (total: ${data.total || 0})`);
+
         loading.style.display = 'none';
-        
+
         if (!data.records || data.records.length === 0) {
+            logLine('[HISTORY] Nenhum registo encontrado');
             empty.style.display = 'block';
             return;
         }
-        
+
         // Populate table
+        logLine(`[HISTORY] A renderizar tabela com ${data.records.length} registos`);
         renderHistoryTable(data.records);
         updateHistoryPagination(data);
-        
+
         results.style.display = 'block';
         
     } catch (err) {
@@ -1162,7 +1761,10 @@ window.loadHistory = async function(skip = 0) {
 window.renderHistoryTable = function(records) {
     const tbody = document.getElementById('history-table-body');
     tbody.innerHTML = '';
-    
+
+    // Store records globally for export
+    allHistoryRecords = records;
+
     records.forEach(record => {
         const row = document.createElement('tr');
         row.style.borderBottom = '1px solid var(--border)';
@@ -1200,7 +1802,13 @@ window.renderHistoryTable = function(records) {
             <td style="padding: 0.75rem; text-align: right;">${creditos.toLocaleString('pt-PT', {minimumFractionDigits: 2})}</td>
             <td style="padding: 0.75rem; text-align: right;">${debitos.toLocaleString('pt-PT', {minimumFractionDigits: 2})}</td>
             <td style="padding: 0.75rem; text-align: center;">
-                ${record.storage_key ? `<button class="btn btn-secondary btn-sm" onclick="downloadArchive('${record.storage_key}', '${record.file_info?.name || 'arquivo.xml'}')">📥 Download ZIP</button>` : '<span style="color: var(--text-secondary);">-</span>'}
+                ${record.storage_key ? `
+                    <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="downloadArchive('${record.storage_key}', '${record.file_info?.name || 'arquivo.xml'}')">📥 Download ZIP</button>
+                        <button class="btn btn-info btn-sm" onclick="analyzeHistoryDocs('${record.storage_key}')">📊 Análise Dados</button>
+                        <button class="btn btn-sm" style="background:#dc3545;border-color:#dc3545;color:white;" onclick="deleteHistoryRecord('${record._id}')">🗑️ Eliminar</button>
+                    </div>
+                ` : `<button class="btn btn-sm" style="background:#dc3545;border-color:#dc3545;color:white;" onclick="deleteHistoryRecord('${record._id}')">🗑️ Eliminar</button>`}
             </td>
         `;
         
@@ -1286,17 +1894,181 @@ window.downloadArchive = async function(storageKey, originalName) {
     }
 };
 
+window.analyzeHistoryDocs = async function(storageKey) {
+    if (!state.token) {
+        alert('⚠️ Faça login primeiro');
+        return;
+    }
+
+    try {
+        // Switch to docs tab
+        showTab('docs');
+
+        // Show loading
+        document.getElementById('docs-loading').style.display = 'block';
+        document.getElementById('docs-table-body').innerHTML = '';
+        document.getElementById('docs-stats').style.display = 'none';
+
+        setStatus('📄 A carregar documentos do histórico...', 'info');
+        logLine(`[DOCS-HISTORY] A carregar documentos do storage_key: ${storageKey}`);
+
+        // Fetch documents from storage
+        const res = await fetch('/pt/history/extract-documents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + state.token
+            },
+            body: JSON.stringify({ storage_key: storageKey })
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.documents) {
+            allDocs = data.documents;
+            logLine(`[DOCS-HISTORY] Encontrados ${allDocs.length} documentos`);
+            setStatus(`✅ ${allDocs.length} documentos carregados do histórico`, 'success');
+
+            // Show stats
+            updateDocsStats();
+
+            // Render table
+            renderDocsTable(allDocs);
+        } else {
+            logLine('[DOCS-HISTORY] ❌ Erro: ' + (data.error || 'Erro desconhecido'));
+            setStatus('❌ Erro ao carregar documentos', 'error');
+            document.getElementById('docs-table-body').innerHTML = `
+                <tr><td colspan="10" style="padding:2rem; text-align:center; color:#ef4444;">
+                    ❌ Erro: ${data.error || data.detail || 'Erro desconhecido'}
+                </td></tr>
+            `;
+        }
+    } catch (e) {
+        logLine('[DOCS-HISTORY] ❌ Exceção: ' + e.message);
+        setStatus('❌ Erro ao carregar documentos', 'error');
+        document.getElementById('docs-table-body').innerHTML = `
+            <tr><td colspan="10" style="padding:2rem; text-align:center; color:#ef4444;">
+                ❌ Erro: ${e.message}
+            </td></tr>
+        `;
+    } finally {
+        document.getElementById('docs-loading').style.display = 'none';
+    }
+};
+
 window.showHistoryError = function(message) {
     const error = document.getElementById('history-error');
     const loading = document.getElementById('history-loading');
     const empty = document.getElementById('history-empty');
     const results = document.getElementById('history-results');
-    
+
     loading.style.display = 'none';
     empty.style.display = 'none';
     results.style.display = 'none';
     error.style.display = 'block';
     error.textContent = message;
+};
+
+window.exportHistoryToExcel = function() {
+    // Use stored records data instead of parsing HTML
+    if (!allHistoryRecords || allHistoryRecords.length === 0) {
+        alert('Nenhum registo de histórico para exportar.\n\nCarregue o histórico primeiro.');
+        return;
+    }
+
+    // Create HTML table for Excel
+    let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+    html += '<head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>';
+    html += '<x:Name>Histórico Validações</x:Name>';
+    html += '<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
+    html += '</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
+    html += '<meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>';
+    html += '</head><body>';
+    html += '<table border="1">';
+
+    // Header
+    html += '<thead><tr style="background-color: #f1f5f9; font-weight: bold;">';
+    html += '<th>Data/Hora</th>';
+    html += '<th>NIF</th>';
+    html += '<th>Ano</th>';
+    html += '<th>Mês</th>';
+    html += '<th>Operação</th>';
+    html += '<th>Sucesso</th>';
+    html += '<th>Faturas</th>';
+    html += '<th>Créditos (€)</th>';
+    html += '<th>Débitos (€)</th>';
+    html += '<th>Ficheiro</th>';
+    html += '</tr></thead>';
+
+    // Body - use actual data from records
+    html += '<tbody>';
+    allHistoryRecords.forEach(record => {
+        html += '<tr>';
+
+        // Data/Hora
+        const date = new Date(record.validated_at);
+        const dateStr = date.toLocaleString('pt-PT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        html += '<td>' + dateStr + '</td>';
+
+        // NIF
+        html += '<td>' + (record.nif || '') + '</td>';
+
+        // Ano
+        html += '<td>' + (record.year || '') + '</td>';
+
+        // Mês
+        html += '<td>' + (record.month || '') + '</td>';
+
+        // Operação
+        html += '<td>' + (record.operation || '') + '</td>';
+
+        // Sucesso
+        html += '<td>' + (record.success ? 'Sim' : 'Não') + '</td>';
+
+        // Statistics
+        const stats = record.statistics || {};
+        const faturas = stats.total_faturas || 0;
+        const creditos = stats.total_creditos || 0;
+        const debitos = stats.total_debitos || 0;
+
+        // Faturas
+        html += '<td>' + faturas + '</td>';
+
+        // Créditos (€)
+        html += '<td style="mso-number-format:\\"0\\.00\\"">' + creditos.toFixed(2) + '</td>';
+
+        // Débitos (€)
+        html += '<td style="mso-number-format:\\"0\\.00\\"">' + debitos.toFixed(2) + '</td>';
+
+        // Ficheiro (nome do ficheiro original)
+        const filename = record.file_info?.name || record.storage_key || '';
+        html += '<td>' + filename + '</td>';
+
+        html += '</tr>';
+    });
+    html += '</tbody></table></body></html>';
+
+    // Create blob and download
+    const blob = new Blob(['\ufeff', html], {
+        type: 'application/vnd.ms-excel'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'historico_validacoes_' + new Date().toISOString().slice(0,10) + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    logLine('[HISTORY] Exportado para Excel: ' + allHistoryRecords.length + ' registos');
 };
 
 // Auto-load history when switching to history tab
@@ -1309,4 +2081,698 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ==================== Create Custom Fix Rule Modal ====================
+window.showCreateRuleModal = function(errorIndex, encodedMessage) {
+    const errorMessage = decodeURIComponent(encodedMessage);
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '10000';
+
+    // Modal
+    const modal = document.createElement('div');
+    modal.style.position = 'absolute';
+    modal.style.top = '50%';
+    modal.style.left = '50%';
+    modal.style.transform = 'translate(-50%, -50%)';
+    modal.style.background = '#fff';
+    modal.style.color = '#111';
+    modal.style.borderRadius = '8px';
+    modal.style.maxWidth = '800px';
+    modal.style.width = '90%';
+    modal.style.maxHeight = '80%';
+    modal.style.overflow = 'auto';
+    modal.style.boxShadow = '0 10px 30px rgba(0,0,0,0.3)';
+    modal.style.padding = '20px';
+
+    modal.innerHTML = `
+        <h2 style="margin:0 0 16px 0;">Criar Regra Personalizada</h2>
+
+        <div style="margin-bottom:12px;">
+            <label style="display:block;font-weight:500;margin-bottom:4px;">ID da Regra:</label>
+            <input type="text" id="rule-id" placeholder="ex: my_custom_rule" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+            <label style="display:block;font-weight:500;margin-bottom:4px;">Nome:</label>
+            <input type="text" id="rule-name" placeholder="ex: Corrigir erro XYZ" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+            <label style="display:block;font-weight:500;margin-bottom:4px;">Código do Erro:</label>
+            <input type="text" id="rule-code" placeholder="ex: MY_ERROR" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+            <label style="display:block;font-weight:500;margin-bottom:4px;">Mensagem de Erro Original:</label>
+            <textarea id="rule-error-msg" readonly style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#f5f5f5;font-family:monospace;font-size:12px;height:80px;">${errorMessage}</textarea>
+        </div>
+
+        <div style="margin-bottom:12px;">
+            <label style="display:block;font-weight:500;margin-bottom:4px;">Padrão Regex (use named groups como (?P<line>\\d+)):</label>
+            <input type="text" id="rule-pattern" placeholder="ex: Linha:\\s*(?P<line>\\d+).*?MeuErro" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:12px;">
+            <small style="color:#666;">Dica: Use (?P<line>\\d+) para capturar número da linha, (?P<val>...) para valores</small>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="display:block;font-weight:500;margin-bottom:8px;">Sugestões de Correção:</label>
+            <div id="suggestions-container">
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <input type="text" class="sug-label" placeholder="Label (ex: M16 - Artigo 14º)" style="flex:2;padding:6px;border:1px solid #ddd;border-radius:4px;">
+                    <input type="text" class="sug-reason" placeholder="Reason" style="flex:2;padding:6px;border:1px solid #ddd;border-radius:4px;">
+                    <input type="text" class="sug-code" placeholder="Code (ex: M16)" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;">
+                </div>
+            </div>
+            <button class="btn btn-sm" onclick="window.addSuggestionRow()">+ Adicionar Sugestão</button>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+            <button class="btn btn-secondary" onclick="document.body.removeChild(this.closest('[style*=\\'position: fixed\\']'))">Cancelar</button>
+            <button class="btn" onclick="window.saveCustomRule()">💾 Guardar Regra</button>
+        </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+};
+
+window.addSuggestionRow = function() {
+    const container = document.getElementById('suggestions-container');
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '8px';
+    row.style.marginBottom = '8px';
+    row.innerHTML = `
+        <input type="text" class="sug-label" placeholder="Label" style="flex:2;padding:6px;border:1px solid #ddd;border-radius:4px;">
+        <input type="text" class="sug-reason" placeholder="Reason" style="flex:2;padding:6px;border:1px solid #ddd;border-radius:4px;">
+        <input type="text" class="sug-code" placeholder="Code" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:4px;">
+        <button class="btn btn-sm" onclick="this.parentElement.remove()">✖</button>
+    `;
+    container.appendChild(row);
+};
+
+// ==================== Check Documents ====================
+let allDocs = []; // Store all documents globally for filtering
+let allHistoryRecords = []; // Store history records globally for export
+
+window.checkDocs = async function() {
+    let uploadId = (window.state && window.state.lastUploadId) || null;
+
+    // If no upload ID, check if file is selected and upload it first
+    if (!uploadId) {
+        const fileInput = document.getElementById('file');
+        const file = fileInput && fileInput.files && fileInput.files[0];
+
+        if (!file) {
+            alert('Por favor, selecione um ficheiro SAFT primeiro');
+            return;
+        }
+
+        // File is selected but not uploaded - perform automatic upload
+        logLine('[DOCS] Ficheiro seleccionado mas não carregado. A fazer upload automático...');
+        setStatus('📤 A fazer upload do ficheiro...', 'info');
+
+        try {
+            // Perform chunked upload (same as validateSmart)
+            const startRes = await fetch('/pt/upload/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+                },
+                body: JSON.stringify({ filename: file.name, size: file.size })
+            });
+
+            if (!startRes.ok) {
+                const errText = await startRes.text();
+                throw new Error(`Falha no upload/start (${startRes.status}): ${errText}`);
+            }
+
+            const start = await startRes.json();
+            if (!start.upload_id) throw new Error('Sem upload_id na resposta');
+
+            uploadId = start.upload_id;
+            const chunkSize = start.chunk_size || (5 * 1024 * 1024);
+            logLine(`[DOCS] Upload iniciado: id=${uploadId}, chunk=${Math.round(chunkSize/1024)}KB`);
+
+            let sent = 0;
+            let index = 0;
+            const totalChunks = Math.ceil(file.size / chunkSize);
+
+            // Upload chunks
+            while (sent < file.size) {
+                const slice = file.slice(sent, Math.min(sent + chunkSize, file.size));
+                const buf = await slice.arrayBuffer();
+
+                const putRes = await fetch(`/pt/upload/chunk?upload_id=${uploadId}&index=${index}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '') },
+                    body: buf
+                });
+
+                if (!putRes.ok) {
+                    const errText = await putRes.text();
+                    throw new Error(`Falha no chunk ${index} (${putRes.status}): ${errText}`);
+                }
+
+                sent += slice.size;
+                index++;
+                const pct = Math.round((sent / file.size) * 100);
+                setStatus(`📤 A fazer upload... ${pct}%`, 'info');
+            }
+
+            logLine(`[DOCS] Upload 100% completo (${totalChunks} chunks)`);
+
+            // Finalize upload
+            const finishRes = await fetch('/pt/upload/finish', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+                },
+                body: JSON.stringify({ upload_id: uploadId })
+            });
+
+            if (!finishRes.ok) {
+                const errText = await finishRes.text();
+                throw new Error(`Falha no upload/finish (${finishRes.status}): ${errText}`);
+            }
+
+            // Store upload ID
+            if (!window.state) window.state = {};
+            window.state.lastUploadId = uploadId;
+
+            logLine('[DOCS] ✅ Upload concluído com sucesso');
+
+        } catch (e) {
+            logLine('[DOCS] ❌ Erro no upload: ' + e.message);
+            alert('❌ Erro ao fazer upload: ' + e.message);
+            return;
+        }
+    }
+
+    // Switch to docs tab
+    showTab('docs');
+
+    // Show loading
+    document.getElementById('docs-loading').style.display = 'block';
+    document.getElementById('docs-table-body').innerHTML = '';
+    document.getElementById('docs-stats').style.display = 'none';
+
+    setStatus('📄 A carregar documentos do ficheiro XML...', 'info');
+    logLine('[DOCS] A carregar documentos do upload_id=' + uploadId);
+
+    try {
+        const res = await fetch('/pt/upload/extract-documents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+            },
+            body: JSON.stringify({ upload_id: uploadId })
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.documents) {
+            allDocs = data.documents;
+            logLine(`[DOCS] Encontrados ${allDocs.length} documentos`);
+            setStatus(`✅ ${allDocs.length} documentos carregados`, 'success');
+
+            // Show stats
+            updateDocsStats();
+
+            // Render table
+            renderDocsTable(allDocs);
+        } else {
+            logLine('[DOCS] ❌ Erro: ' + (data.error || 'Erro desconhecido'));
+            setStatus('❌ Erro ao carregar documentos', 'error');
+            document.getElementById('docs-table-body').innerHTML = `
+                <tr><td colspan="10" style="padding:2rem; text-align:center; color:#ef4444;">
+                    ❌ Erro: ${data.error || data.detail || 'Erro desconhecido'}
+                </td></tr>
+            `;
+        }
+    } catch (e) {
+        logLine('[DOCS] ❌ Exceção: ' + e.message);
+        setStatus('❌ Erro ao carregar documentos', 'error');
+        document.getElementById('docs-table-body').innerHTML = `
+            <tr><td colspan="10" style="padding:2rem; text-align:center; color:#ef4444;">
+                ❌ Erro: ${e.message}
+            </td></tr>
+        `;
+    } finally {
+        document.getElementById('docs-loading').style.display = 'none';
+    }
+};
+
+window.renderDocsTable = function(docs) {
+    const tbody = document.getElementById('docs-table-body');
+
+    if (!docs || docs.length === 0) {
+        tbody.innerHTML = `
+            <tr><td colspan="10" style="padding:2rem; text-align:center; color:#94a3b8;">
+                Nenhum documento encontrado
+            </td></tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = docs.map((doc, idx) => {
+        const statusBadge = doc.DocumentStatus === 'N'
+            ? '<span style="background:#10b981;color:white;padding:2px 8px;border-radius:4px;font-size:0.75rem;">Normal</span>'
+            : '<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:4px;font-size:0.75rem;">Anulado</span>';
+
+        const typeColor = {
+            'FT': '#2563eb',
+            'NC': '#ef4444',
+            'ND': '#f59e0b',
+            'FR': '#10b981',
+            'GT': '#8b5cf6'
+        }[doc.InvoiceType] || '#64748b';
+
+        return `
+            <tr style="border-bottom:1px solid #e2e8f0;" data-type="${doc.InvoiceType}" data-status="${doc.DocumentStatus}">
+                <td style="padding:0.75rem;">${idx + 1}</td>
+                <td style="padding:0.75rem;"><span style="color:${typeColor};font-weight:600;">${doc.InvoiceType}</span></td>
+                <td style="padding:0.75rem;font-family:monospace;">${doc.InvoiceNo}</td>
+                <td style="padding:0.75rem;">${doc.InvoiceDate}</td>
+                <td style="padding:0.75rem;font-family:monospace;">${doc.CustomerID || '-'}</td>
+                <td style="padding:0.75rem;">${doc.CustomerName || '-'}</td>
+                <td style="padding:0.75rem; text-align:right;font-family:monospace;">€ ${parseFloat(doc.NetTotal || 0).toFixed(2)}</td>
+                <td style="padding:0.75rem; text-align:right;font-family:monospace;">€ ${parseFloat(doc.TaxPayable || 0).toFixed(2)}</td>
+                <td style="padding:0.75rem; text-align:right;font-family:monospace;font-weight:600;">€ ${parseFloat(doc.GrossTotal || 0).toFixed(2)}</td>
+                <td style="padding:0.75rem; text-align:center;">${statusBadge}</td>
+            </tr>
+        `;
+    }).join('');
+};
+
+window.updateDocsStats = function() {
+    if (!allDocs || allDocs.length === 0) return;
+
+    const total = allDocs.length;
+    const totalValue = allDocs.reduce((sum, doc) => sum + parseFloat(doc.GrossTotal || 0), 0);
+    const ftCount = allDocs.filter(d => d.InvoiceType === 'FT').length;
+    const ncCount = allDocs.filter(d => d.InvoiceType === 'NC').length;
+
+    document.getElementById('stats-total').textContent = total;
+    document.getElementById('stats-total-value').textContent = `€ ${totalValue.toFixed(2)}`;
+    document.getElementById('stats-ft').textContent = ftCount;
+    document.getElementById('stats-nc').textContent = ncCount;
+    document.getElementById('docs-stats').style.display = 'block';
+};
+
+window.filterDocsTable = function() {
+    const searchTerm = document.getElementById('docs-search').value.toLowerCase();
+    const typeFilter = document.getElementById('docs-filter-type').value;
+    const statusFilter = document.getElementById('docs-filter-status').value;
+
+    const filtered = allDocs.filter(doc => {
+        // Text search
+        const matchesSearch = !searchTerm ||
+            doc.InvoiceNo.toLowerCase().includes(searchTerm) ||
+            (doc.CustomerID && doc.CustomerID.toLowerCase().includes(searchTerm)) ||
+            (doc.CustomerName && doc.CustomerName.toLowerCase().includes(searchTerm)) ||
+            doc.GrossTotal.toString().includes(searchTerm);
+
+        // Type filter
+        const matchesType = !typeFilter || doc.InvoiceType === typeFilter;
+
+        // Status filter
+        const matchesStatus = !statusFilter || doc.DocumentStatus === statusFilter;
+
+        return matchesSearch && matchesType && matchesStatus;
+    });
+
+    renderDocsTable(filtered);
+    logLine(`[DOCS] Filtrado: ${filtered.length} de ${allDocs.length} documentos`);
+};
+
+window.exportDocsToCSV = function() {
+    if (!allDocs || allDocs.length === 0) {
+        alert('Nenhum documento para exportar');
+        return;
+    }
+
+    const headers = ['Tipo', 'Número', 'Data', 'Cliente ID', 'Cliente Nome', 'Valor s/ IVA', 'IVA', 'Total', 'Status'];
+    const rows = allDocs.map(doc => [
+        doc.InvoiceType,
+        doc.InvoiceNo,
+        doc.InvoiceDate,
+        doc.CustomerID || '',
+        doc.CustomerName || '',
+        doc.NetTotal,
+        doc.TaxPayable,
+        doc.GrossTotal,
+        doc.DocumentStatus === 'N' ? 'Normal' : 'Anulado'
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `documentos_saft_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+
+    logLine('[DOCS] Exportado para CSV: ' + allDocs.length + ' documentos');
+};
+
+window.exportDocsToExcel = function() {
+    console.log('[EXPORT-DOCS] Starting export...');
+    console.log('[EXPORT-DOCS] allDocs:', allDocs);
+    console.log('[EXPORT-DOCS] allDocs.length:', allDocs ? allDocs.length : 'undefined');
+
+    if (!allDocs || allDocs.length === 0) {
+        alert('Nenhum documento para exportar.\n\nPrimeiro carregue documentos clicando em "📄 Checkar os Docs".');
+        return;
+    }
+
+    console.log('[EXPORT-DOCS] First document:', allDocs[0]);
+
+    // Create Excel-compatible HTML with proper encoding
+    let html = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="Documentos SAFT">
+  <Table>
+   <Row>
+    <Cell><Data ss:Type="String">Tipo</Data></Cell>
+    <Cell><Data ss:Type="String">Número</Data></Cell>
+    <Cell><Data ss:Type="String">Data</Data></Cell>
+    <Cell><Data ss:Type="String">Cliente ID</Data></Cell>
+    <Cell><Data ss:Type="String">Cliente Nome</Data></Cell>
+    <Cell><Data ss:Type="String">Valor s/ IVA (€)</Data></Cell>
+    <Cell><Data ss:Type="String">IVA (€)</Data></Cell>
+    <Cell><Data ss:Type="String">Total (€)</Data></Cell>
+    <Cell><Data ss:Type="String">Status</Data></Cell>
+   </Row>`;
+
+    // Add data rows
+    allDocs.forEach((doc, idx) => {
+        const netTotal = parseFloat(doc.net_total) || 0;
+        const taxPayable = parseFloat(doc.tax_payable) || 0;
+        const grossTotal = parseFloat(doc.gross_total) || 0;
+
+        html += `
+   <Row>
+    <Cell><Data ss:Type="String">${escapeXml(doc.type || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.number || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.date || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.customer_id || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.customer_name || '')}</Data></Cell>
+    <Cell><Data ss:Type="Number">${netTotal.toFixed(2)}</Data></Cell>
+    <Cell><Data ss:Type="Number">${taxPayable.toFixed(2)}</Data></Cell>
+    <Cell><Data ss:Type="Number">${grossTotal.toFixed(2)}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.status || '')}</Data></Cell>
+   </Row>`;
+
+        if (idx === 0) {
+            console.log('[EXPORT-DOCS] First row generated:', doc);
+        }
+    });
+
+    html += `
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+    console.log('[EXPORT-DOCS] Total XML length:', html.length);
+    console.log('[EXPORT-DOCS] First 500 chars:', html.substring(0, 500));
+
+    // Create blob with proper BOM for UTF-8
+    const blob = new Blob(['\ufeff' + html], {
+        type: 'application/vnd.ms-excel'
+    });
+
+    console.log('[EXPORT-DOCS] Blob created, size:', blob.size);
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'documentos_saft_' + new Date().toISOString().slice(0,10) + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    logLine('[DOCS] Exportado para Excel: ' + allDocs.length + ' documentos');
+    console.log('[EXPORT-DOCS] Export completed successfully');
+};
+
+// Helper function to escape XML special characters
+function escapeXml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+// ==================== Auto-Fix Loop ====================
+window.autoFixLoop = async function(uploadId, maxIterations = 20, shouldSubmit = false) {
+    let iteration = 0;
+    let totalFixed = 0;
+
+    setStatus(`🔁 Auto-fix iniciado... (máx ${maxIterations} iterações)`, 'info');
+    logLine(`[AUTO-FIX] Iniciando loop automático para upload_id=${uploadId}`);
+    if (shouldSubmit) {
+        logLine(`[AUTO-FIX] Modo: Corrigir + Enviar para AT`);
+    }
+
+    while (iteration < maxIterations) {
+        iteration++;
+        logLine(`\n[AUTO-FIX] Iteração ${iteration}/${maxIterations}`);
+        setStatus(`🔁 Auto-fix: Iteração ${iteration}/${maxIterations}...`, 'info');
+
+        try {
+            // Validate to get current issues
+            logLine(`[AUTO-FIX] A validar upload_id: ${uploadId}`);
+            const validateRes = await fetch(`/pt/validate-jar-by-upload?upload_id=${uploadId}&operation=validar&full=1`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+                }
+            });
+
+            // Check for HTTP errors
+            if (!validateRes.ok) {
+                const errorText = await validateRes.text();
+                logLine(`[AUTO-FIX] ❌ Erro HTTP ${validateRes.status}: ${errorText}`);
+                setStatus(`❌ Erro ao validar: HTTP ${validateRes.status}`, 'error');
+                alert(`❌ Erro no auto-fix:\n\nHTTP ${validateRes.status}\n${errorText}\n\nO ficheiro pode ter sido substituído. Tente novamente com o ficheiro atual.`);
+                return;
+            }
+
+            const validateData = await validateRes.json();
+            const issues = validateData.issues || [];
+
+            // Log JAR validation details
+            logLine(`[AUTO-FIX] ═══════════════════════════════════════`);
+            logLine(`[AUTO-FIX] Validação JAR (Iteração ${iteration})`);
+            logLine(`[AUTO-FIX] Return code: ${validateData.returncode}`);
+            logLine(`[AUTO-FIX] Status: ${validateData.ok ? '✅ OK' : '❌ COM ERROS'}`);
+            logLine(`[AUTO-FIX] Erros encontrados: ${issues.length}`);
+
+            // Show JAR stdout if available
+            if (validateData.stdout && validateData.stdout.trim()) {
+                logLine(`[AUTO-FIX] ───────────────────────────────────────`);
+                logLine(`[AUTO-FIX] JAR STDOUT:`);
+                const stdoutLines = validateData.stdout.split('\n').slice(0, 20); // First 20 lines
+                stdoutLines.forEach(line => {
+                    if (line.trim()) logLine(`  ${line}`);
+                });
+                if (validateData.stdout.split('\n').length > 20) {
+                    logLine(`  ... (truncado, ${validateData.stdout.split('\n').length} linhas no total)`);
+                }
+            }
+
+            // Show JAR stderr if available
+            if (validateData.stderr && validateData.stderr.trim()) {
+                logLine(`[AUTO-FIX] ───────────────────────────────────────`);
+                logLine(`[AUTO-FIX] JAR STDERR:`);
+                const stderrLines = validateData.stderr.split('\n').slice(0, 10);
+                stderrLines.forEach(line => {
+                    if (line.trim()) logLine(`  ${line}`);
+                });
+            }
+
+            // Show issues details
+            if (issues.length > 0) {
+                logLine(`[AUTO-FIX] ───────────────────────────────────────`);
+                logLine(`[AUTO-FIX] Detalhes dos erros:`);
+                issues.forEach((issue, idx) => {
+                    const lineInfo = issue.location?.line ? ` (linha ${issue.location.line})` : '';
+                    logLine(`  ${idx + 1}. [${issue.code}]${lineInfo}: ${issue.message?.substring(0, 100)}`);
+                });
+            }
+
+            logLine(`[AUTO-FIX] ═══════════════════════════════════════`);
+
+            // If no errors or validation succeeded, we're done
+            if (validateData.ok || issues.length === 0) {
+                logLine('[AUTO-FIX] ✅ Sem erros! Auto-fix concluído.');
+                setStatus(`✅ Auto-fix concluído! ${totalFixed} correções aplicadas em ${iteration} iterações.`, 'success');
+
+                // Show submit button
+                const submitPhase = document.getElementById('submit-phase');
+                if (submitPhase) {
+                    submitPhase.style.display = 'block';
+                    logLine('[AUTO-FIX] ✨ Botão de envio para AT ativado!');
+                }
+
+                // If should submit, do it now
+                if (shouldSubmit) {
+                    logLine('[AUTO-FIX] 📤 Iniciando envio automático para AT...');
+                    setStatus('📤 A enviar para AT...', 'info');
+                    await window.submitToAT(uploadId);
+                } else {
+                    alert(`✅ Auto-fix concluído!\n\n${totalFixed} correções aplicadas\n${iteration} iterações`);
+                }
+                return;
+            }
+
+            // Prepare fixes from issues with suggestions
+            const fixes = [];
+            issues.forEach((it, idx) => {
+                if (it.suggestion) {
+                    fixes.push(it);
+                } else if (it.suggestions && Array.isArray(it.suggestions) && it.suggestions.length > 0) {
+                    // Use first suggestion by default
+                    fixes.push({
+                        ...it,
+                        selected_suggestion: it.suggestions[0]
+                    });
+                }
+            });
+
+            if (fixes.length === 0) {
+                logLine('[AUTO-FIX] ⚠️ Sem correções automáticas disponíveis. Parando.');
+                setStatus(`⚠️ Auto-fix parou: ${issues.length} erros sem correção automática`, 'warning');
+                // Show popup with remaining issues
+                window.showIssuesPopup(issues);
+                return;
+            }
+
+            logLine(`[AUTO-FIX] 🔧 Aplicando ${fixes.length} correções...`);
+            fixes.forEach((fix, idx) => {
+                const lineInfo = fix.location?.line ? ` (linha ${fix.location.line})` : '';
+                logLine(`  ${idx + 1}. ${fix.code}${lineInfo}`);
+            });
+
+            // Apply fixes
+            const fixRes = await fetch('/pt/upload/apply-fixes-and-validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (window.state && window.state.token ? window.state.token : '')
+                },
+                body: JSON.stringify({ upload_id: uploadId, fixes })
+            });
+
+            const fixData = await fixRes.json();
+            const applied = fixData.applied || 0;
+            totalFixed += applied;
+
+            logLine(`[AUTO-FIX] ✅ Aplicadas ${applied} correções (total acumulado: ${totalFixed})`);
+
+            // Log revalidation result after fixes
+            if (fixData.ok) {
+                logLine(`[AUTO-FIX] 🎉 Revalidação após correções: SEM ERROS!`);
+            } else if (fixData.issues && fixData.issues.length > 0) {
+                logLine(`[AUTO-FIX] ⚠️ Revalidação após correções: ainda há ${fixData.issues.length} erros`);
+            }
+
+            // Small delay to avoid overwhelming the server
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (e) {
+            logLine(`[AUTO-FIX] ❌ Erro: ${e.message}`);
+            setStatus('❌ Erro no auto-fix: ' + e.message, 'error');
+            alert('❌ Erro no auto-fix: ' + e.message);
+            return;
+        }
+    }
+
+    // Max iterations reached
+    logLine(`[AUTO-FIX] ⚠️ Atingido limite de ${maxIterations} iterações`);
+    setStatus(`⚠️ Auto-fix parou: limite de ${maxIterations} iterações atingido`, 'warning');
+    alert(`⚠️ Auto-fix parou após ${maxIterations} iterações.\n\n${totalFixed} correções aplicadas.\n\nPode haver erros restantes.`);
+};
+
+window.saveCustomRule = async function() {
+    const ruleId = document.getElementById('rule-id').value.trim();
+    const ruleName = document.getElementById('rule-name').value.trim();
+    const ruleCode = document.getElementById('rule-code').value.trim();
+    const rulePattern = document.getElementById('rule-pattern').value.trim();
+
+    if (!ruleId || !ruleName || !ruleCode || !rulePattern) {
+        alert('Por favor preencha todos os campos obrigatórios');
+        return;
+    }
+
+    // Collect suggestions
+    const suggestions = [];
+    const sugLabels = document.querySelectorAll('.sug-label');
+    const sugReasons = document.querySelectorAll('.sug-reason');
+    const sugCodes = document.querySelectorAll('.sug-code');
+
+    for (let i = 0; i < sugLabels.length; i++) {
+        const label = sugLabels[i].value.trim();
+        const reason = sugReasons[i].value.trim();
+        const code = sugCodes[i].value.trim();
+        if (label && reason && code) {
+            suggestions.push({ label, reason, code });
+        }
+    }
+
+    const rule = {
+        id: ruleId,
+        name: ruleName,
+        pattern: {
+            type: 'regex',
+            match: rulePattern,
+            flags: ['IGNORECASE']
+        },
+        code: ruleCode,
+        suggestions: suggestions,
+        fix_type: 'custom',
+        enabled: true
+    };
+
+    try {
+        const token = (window.state && window.state.token) || '';
+        const res = await fetch('/pt/fix-rules', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ rule })
+        });
+
+        const data = await res.json();
+
+        if (data.ok) {
+            alert('✅ Regra guardada com sucesso!');
+            // Close modal
+            const overlay = document.querySelector('[style*="position: fixed"][style*="z-index: 10000"]');
+            if (overlay) document.body.removeChild(overlay);
+        } else {
+            alert('❌ Erro ao guardar regra: ' + (data.detail || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        alert('❌ Erro ao guardar regra: ' + e.message);
+    }
+};
 
