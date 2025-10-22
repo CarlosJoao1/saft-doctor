@@ -2444,15 +2444,29 @@ window.exportDocsToCSV = function() {
 
 window.exportDocsToExcel = function() {
     console.log('[EXPORT-DOCS] Starting export...');
+    console.log('[EXPORT-DOCS] typeof allDocs:', typeof allDocs);
     console.log('[EXPORT-DOCS] allDocs:', allDocs);
     console.log('[EXPORT-DOCS] allDocs.length:', allDocs ? allDocs.length : 'undefined');
+    console.log('[EXPORT-DOCS] window.allDocs:', window.allDocs);
 
-    if (!allDocs || allDocs.length === 0) {
+    // Try to get docs from table if allDocs is empty
+    let docsToExport = allDocs;
+
+    if (!docsToExport || docsToExport.length === 0) {
+        console.log('[EXPORT-DOCS] allDocs is empty, checking table...');
+        const tbody = document.getElementById('docs-table-body');
+        if (tbody && tbody.rows && tbody.rows.length > 0) {
+            console.log('[EXPORT-DOCS] Found ' + tbody.rows.length + ' rows in table, but allDocs is empty!');
+            alert('⚠️ ERRO: Dados não encontrados na memória.\n\nPor favor:\n1. Recarregue a página (F5)\n2. Faça upload do ficheiro novamente\n3. Clique "📄 Checkar os Docs"\n4. Tente exportar novamente\n\nSe o problema persistir, verifique a consola (F12).');
+            return;
+        }
+
         alert('Nenhum documento para exportar.\n\nPrimeiro carregue documentos clicando em "📄 Checkar os Docs".');
         return;
     }
 
-    console.log('[EXPORT-DOCS] First document:', allDocs[0]);
+    console.log('[EXPORT-DOCS] Exporting ' + docsToExport.length + ' documents');
+    console.log('[EXPORT-DOCS] First document:', docsToExport[0]);
 
     // Create Excel-compatible HTML with proper encoding
     let html = `<?xml version="1.0"?>
@@ -2477,7 +2491,7 @@ window.exportDocsToExcel = function() {
    </Row>`;
 
     // Add data rows
-    allDocs.forEach((doc, idx) => {
+    docsToExport.forEach((doc, idx) => {
         const netTotal = parseFloat(doc.net_total) || 0;
         const taxPayable = parseFloat(doc.tax_payable) || 0;
         const grossTotal = parseFloat(doc.gross_total) || 0;
@@ -2498,7 +2512,12 @@ window.exportDocsToExcel = function() {
         if (idx === 0) {
             console.log('[EXPORT-DOCS] First row generated:', doc);
         }
+        if (idx % 100 === 0) {
+            console.log('[EXPORT-DOCS] Progress: ' + idx + '/' + docsToExport.length);
+        }
     });
+
+    console.log('[EXPORT-DOCS] All rows generated: ' + docsToExport.length);
 
     html += `
   </Table>
@@ -2524,8 +2543,9 @@ window.exportDocsToExcel = function() {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    logLine('[DOCS] Exportado para Excel: ' + allDocs.length + ' documentos');
+    logLine('[DOCS] Exportado para Excel: ' + docsToExport.length + ' documentos');
     console.log('[EXPORT-DOCS] Export completed successfully');
+    alert('✅ Exportação concluída!\n\n' + docsToExport.length + ' documentos exportados para Excel.');
 };
 
 // Helper function to escape XML special characters
