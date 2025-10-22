@@ -2333,6 +2333,10 @@ window.checkDocs = async function() {
 window.renderDocsTable = function(docs) {
     const tbody = document.getElementById('docs-table-body');
 
+    // IMPORTANT: Store docs globally for export (same as renderHistoryTable does)
+    allDocs = docs || [];
+    console.log('[renderDocsTable] Stored ' + allDocs.length + ' docs globally');
+
     if (!docs || docs.length === 0) {
         tbody.innerHTML = `
             <tr><td colspan="10" style="padding:2rem; text-align:center; color:#94a3b8;">
