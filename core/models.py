@@ -10,6 +10,7 @@ class ATEntryIn(BaseModel):
 
 class ATEntryOut(BaseModel):
 	ident: str
+	password: Optional[str] = None
 	updated_at: Optional[str] = None
 
 class ATEntryListOut(BaseModel):

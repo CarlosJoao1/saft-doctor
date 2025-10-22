@@ -26,3 +26,11 @@ class UsersRepo:
     async def get_at_entries(self, u: str):
         doc = await self.col.find_one({ 'username': u }, { 'at_entries': 1, '_id': 0 })
         return (doc or {}).get('at_entries') or {}
+
+    async def delete_at_entry(self, u: str, ident_enc: str):
+        """Delete a specific AT entry by encrypted ident"""
+        await self.col.update_one(
+            { 'username': u },
+            { '$unset': { f'at_entries.{ident_enc}': '' } }
+        )
+        return True

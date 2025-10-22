@@ -11,6 +11,7 @@ from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadO
 from core.storage import Storage
 from core.submitter import Submitter
 from core.analysis_repo import AnalysisRepo
+from core.fix_rules import get_rules_manager, detect_issue_with_rules
 import os
 import os.path
 import subprocess
@@ -57,7 +58,7 @@ def _upload_paths(upload_id: str):
     base = os.path.join(UPLOAD_ROOT, upload_id)
     return base + '.meta', base + '.bin'
 
-
+# -------------------- Auth dependency --------------------
 async def get_current_user(
     request: Request, token: str = Depends(oauth2_scheme), db=Depends(get_db)
 ):
@@ -74,6 +75,351 @@ async def get_current_user(
     if not u:
         raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
     return {"username": username, "country": country}
+
+# -------------------- JAR error extraction helpers --------------------
+import re
+
+SUGGEST_COUNTRY_MAP = {
+    'CVE': 'CV',  # currency CVE mistaken as Country; should be CV
+    'CPV': 'CV',  # alpha-3 to alpha-2
+    'PRT': 'PT', 'ESP': 'ES', 'FRA': 'FR', 'DEU': 'DE', 'GBR': 'GB', 'ROU': 'RO',
+}
+
+def _extract_jar_errors(stdout: str) -> list[str]:
+    if not stdout:
+        print("[DEBUG] _extract_jar_errors: stdout is empty")
+        return []
+    # Find errors XML block
+    errs: list[str] = []
+    try:
+        print(f"[DEBUG] _extract_jar_errors: Searching for <errors> block in {len(stdout)} chars of stdout")
+        m = re.search(r"<errors>(.*?)</errors>", stdout, re.DOTALL | re.IGNORECASE)
+        if m:
+            block = m.group(1)
+            print(f"[DEBUG] _extract_jar_errors: Found <errors> block with {len(block)} chars")
+            for em in re.finditer(r"<error>(.*?)</error>", block, re.DOTALL | re.IGNORECASE):
+                msg = em.group(1).strip()
+                errs.append(msg)
+                print(f"[DEBUG] _extract_jar_errors: Extracted error: {msg[:100]}...")
+        else:
+            print("[DEBUG] _extract_jar_errors: NO <errors> block found in stdout")
+            print(f"[DEBUG] _extract_jar_errors: stdout preview: {stdout[:500]}")
+    except Exception as e:
+        print(f"[DEBUG] _extract_jar_errors: Exception: {e}")
+    print(f"[DEBUG] _extract_jar_errors: Returning {len(errs)} errors")
+    return errs
+
+def _find_line_info(xml_path: str, customer_id: str, bad_value: str):
+    """Return (line, column, context) for the offending Country value when possible."""
+    try:
+        # Read with latin-1 fallback given JAR output hints
+        try:
+            txt = Path(xml_path).read_text(encoding='utf-8', errors='replace')
+        except Exception:
+            txt = Path(xml_path).read_text(encoding='latin-1', errors='replace')
+        # Heuristic: look for <CustomerID>id</CustomerID>, then nearest <Country>bad</Country>
+        cid_pat = re.compile(rf"<CustomerID>\s*{re.escape(customer_id)}\s*</CustomerID>", re.IGNORECASE)
+        ct_pat = re.compile(rf"<Country>\s*{re.escape(bad_value)}\s*</Country>", re.IGNORECASE)
+        m = cid_pat.search(txt)
+        start_idx = m.start() if m else 0
+        m2 = ct_pat.search(txt, pos=start_idx)
+        idx = (m2.start() if m2 else (m.start() if m else 0))
+        # Compute line/column
+        pre = txt[:idx]
+        line = pre.count('\n') + 1
+        col = len(pre.split('\n')[-1]) + 1
+        # Extract small context line
+        lines = txt.splitlines()
+        snippet = lines[line-1] if 0 <= line-1 < len(lines) else ''
+        return line, col, snippet[:400]
+    except Exception:
+        return None, None, None
+
+def _detect_issues_from_stdout(stdout: str, xml_path: str) -> list[dict]:
+    print(f"[DEBUG] _detect_issues_from_stdout: Called with xml_path={xml_path}")
+    issues = []
+    errors = _extract_jar_errors(stdout)
+    print(f"[DEBUG] _detect_issues_from_stdout: Processing {len(errors)} errors")
+
+    for msg in errors:
+        print(f"[DEBUG] _detect_issues_from_stdout: Analyzing error: {msg[:100]}...")
+
+        # Try custom rules FIRST
+        custom_issue = detect_issue_with_rules(msg, xml_path)
+        if custom_issue:
+            print(f"[DEBUG] _detect_issues_from_stdout: MATCH via custom rule! code={custom_issue.get('code')}, rule_id={custom_issue.get('rule_id')}")
+            issues.append(custom_issue)
+            continue
+
+        # Pattern 1: Country invalid (PT JAR message)
+        m = re.search(r"O valor \(\"(?P<val>[^\"]+)\"\) no elemento \"Country\" do \"Customer\" com id (?P<cid>[A-Za-z0-9_\-]+)", msg)
+        if m:
+            bad = m.group('val')
+            cid = m.group('cid')
+            suggestion = SUGGEST_COUNTRY_MAP.get(bad)
+            print(f"[DEBUG] _detect_issues_from_stdout: MATCH! CustomerID={cid}, value={bad}, suggestion={suggestion}")
+            line, col, context = _find_line_info(xml_path, cid, bad)
+            print(f"[DEBUG] _detect_issues_from_stdout: Location: line={line}, col={col}")
+            issues.append({
+                'code': 'INVALID_COUNTRY',
+                'message': msg,
+                'customer_id': cid,
+                'value': bad,
+                'suggestion': suggestion,
+                'location': {'line': line, 'column': col, 'context': context}
+            })
+            continue
+
+        # Pattern 2: TaxExemptionReason empty (minLength validation)
+        # Example: "Linha: 548869; coluna: 33; cvc-minLength-valid: Value '' with length = '0' is not facet-valid..."
+        m = re.search(r"Linha:\s*(?P<line>\d+);\s*coluna:\s*(?P<col>\d+);\s*cvc-minLength-valid.*?element.*?SAFPTPortugueseTaxExemptionReason", msg, re.IGNORECASE)
+        if not m:
+            # Try alternative pattern
+            m = re.search(r"Linha:\s*(?P<line>\d+);\s*coluna:\s*(?P<col>\d+).*?TaxExemptionReason", msg, re.IGNORECASE)
+
+        if m:
+            line_num = int(m.group('line'))
+            col_num = int(m.group('col'))
+            print(f"[DEBUG] _detect_issues_from_stdout: MATCH! TaxExemptionReason empty at line={line_num}, col={col_num}")
+
+            # Extract context from XML
+            try:
+                txt = Path(xml_path).read_text(encoding='utf-8', errors='replace')
+                lines = txt.splitlines()
+                snippet = lines[line_num-1] if 0 <= line_num-1 < len(lines) else ''
+            except:
+                snippet = None
+
+            # Multiple suggestions for TaxExemptionReason
+            issues.append({
+                'code': 'EMPTY_TAX_EXEMPTION',
+                'message': msg,
+                'location': {'line': line_num, 'column': col_num, 'context': snippet},
+                'suggestions': [
+                    {
+                        'label': 'M16 - Isento Artigo 14.º do RITI',
+                        'reason': 'Isento Artigo 14.º do RITI (ou similar)',
+                        'code': 'M16'
+                    },
+                    {
+                        'label': 'M0 - Isento Artigo 9.º do RITI',
+                        'reason': 'Isento Artigo 9.º do RITI (ou similar)',
+                        'code': 'M0'
+                    }
+                ]
+            })
+            continue
+
+        # Fallback generic error
+        print(f"[DEBUG] _detect_issues_from_stdout: No pattern match, adding as JAR_ERROR")
+        print(f"[DEBUG] _detect_issues_from_stdout: Full error message: {msg}")
+        issues.append({ 'code': 'JAR_ERROR', 'message': msg })
+
+    print(f"[DEBUG] _detect_issues_from_stdout: Returning {len(issues)} issues")
+    return issues
+
+def _apply_country_fix(xml_text: str, customer_id: str, bad_value: str, new_value: str) -> tuple[str, int]:
+    """Replace <Country>bad</Country> for a specific CustomerID only.
+    Returns (new_text, replacements_count).
+    """
+    try:
+        # minimal-scoped replacement: inside the Customer block containing that CustomerID
+        pattern = re.compile(
+            rf"(<Customer>(?:(?!</Customer>).)*?<CustomerID>\s*{re.escape(customer_id)}\s*</CustomerID>(?:(?!</Customer>).)*?<Country>)\s*{re.escape(bad_value)}\s*(</Country>(?:(?!</Customer>).)*?</Customer>)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        count = 0
+        def repl(m):
+            nonlocal count
+            count += 1
+            return m.group(1) + new_value + m.group(2)
+        new_text, n = pattern.subn(repl, xml_text, count=1)
+        if n == 0:
+            # Fallback: global first occurrence of <Country>bad</Country>
+            new_text2, n2 = re.subn(rf"(<Country>)\s*{re.escape(bad_value)}\s*(</Country>)", r"\g<1>"+new_value+r"\g<2>", xml_text, flags=re.IGNORECASE)
+            return (new_text2 if n2 else xml_text, n2)
+        return new_text, n
+    except Exception:
+        return xml_text, 0
+
+def _apply_tax_exemption_fix(xml_text: str, line_num: int, reason: str, code: str) -> tuple[str, int]:
+    """
+    Replace empty TaxExemptionReason and TaxExemptionCode at specific line.
+    Returns (new_text, replacements_count).
+
+    Searches for pattern:
+        <TaxExemptionReason />
+        <TaxExemptionCode />
+
+    And replaces with:
+        <TaxExemptionReason>{reason}</TaxExemptionReason>
+        <TaxExemptionCode>{code}</TaxExemptionCode>
+    """
+    try:
+        lines = xml_text.splitlines(keepends=True)
+        if line_num < 1 or line_num > len(lines):
+            return xml_text, 0
+
+        # Look for the empty TaxExemptionReason at the specified line
+        # and TaxExemptionCode on following lines (within 5 lines)
+        target_idx = line_num - 1  # 0-indexed
+
+        # Check if this line contains empty TaxExemptionReason
+        if not re.search(r'<TaxExemptionReason\s*/>', lines[target_idx], re.IGNORECASE):
+            print(f"[DEBUG] _apply_tax_exemption_fix: Line {line_num} doesn't contain empty TaxExemptionReason")
+            return xml_text, 0
+
+        # Find TaxExemptionCode in the next few lines
+        code_idx = None
+        for i in range(target_idx, min(target_idx + 5, len(lines))):
+            if re.search(r'<TaxExemptionCode\s*/>', lines[i], re.IGNORECASE):
+                code_idx = i
+                break
+
+        if code_idx is None:
+            print(f"[DEBUG] _apply_tax_exemption_fix: TaxExemptionCode not found near line {line_num}")
+            return xml_text, 0
+
+        print(f"[DEBUG] _apply_tax_exemption_fix: Replacing at line {line_num} (TaxExemptionCode at line {code_idx+1})")
+
+        # Replace TaxExemptionReason
+        lines[target_idx] = re.sub(
+            r'<TaxExemptionReason\s*/>',
+            f'<TaxExemptionReason>{reason}</TaxExemptionReason>',
+            lines[target_idx],
+            flags=re.IGNORECASE
+        )
+
+        # Replace TaxExemptionCode
+        lines[code_idx] = re.sub(
+            r'<TaxExemptionCode\s*/>',
+            f'<TaxExemptionCode>{code}</TaxExemptionCode>',
+            lines[code_idx],
+            flags=re.IGNORECASE
+        )
+
+        new_text = ''.join(lines)
+        return new_text, 1
+    except Exception as e:
+        print(f"[DEBUG] _apply_tax_exemption_fix: Exception: {e}")
+        return xml_text, 0
+
+@router.post('/upload/apply-fixes-and-validate')
+async def upload_apply_fixes_and_validate(request: Request, current=Depends(get_current_user), db=Depends(get_db)):
+    body = await request.json()
+    upload_id = body.get('upload_id')
+    fixes = body.get('fixes') or []
+    if not upload_id:
+        raise HTTPException(status_code=400, detail='upload_id required')
+    meta_path, bin_path = _upload_paths(upload_id)
+    if not os.path.isfile(meta_path) or not os.path.isfile(bin_path):
+        raise HTTPException(status_code=404, detail='upload not found')
+    # Read file text
+    try:
+        try:
+            txt = Path(bin_path).read_text(encoding='utf-8', errors='replace')
+        except Exception:
+            txt = Path(bin_path).read_text(encoding='latin-1', errors='replace')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to read upload: {e}')
+    # Apply fixes
+    applied = 0
+    for fx in fixes:
+        if not isinstance(fx, dict):
+            continue
+
+        # Country fix (single suggestion)
+        if fx.get('code') == 'INVALID_COUNTRY' and fx.get('suggestion') and fx.get('customer_id') and fx.get('value'):
+            txt, n = _apply_country_fix(txt, fx['customer_id'], fx['value'], fx['suggestion'])
+            applied += n
+            print(f"[DEBUG] Applied INVALID_COUNTRY fix: {n} replacements")
+
+        # TaxExemption fix (multiple suggestions)
+        elif fx.get('code') == 'EMPTY_TAX_EXEMPTION' and fx.get('selected_suggestion'):
+            selected = fx['selected_suggestion']
+            location = fx.get('location') or {}
+            line_num = location.get('line')
+            if line_num and selected.get('reason') and selected.get('code'):
+                txt, n = _apply_tax_exemption_fix(txt, line_num, selected['reason'], selected['code'])
+                applied += n
+                print(f"[DEBUG] Applied EMPTY_TAX_EXEMPTION fix: {n} replacements (option: {selected.get('label')})")
+
+    # Write back only if changes were made
+    if applied > 0:
+        try:
+            Path(bin_path).write_text(txt, encoding='utf-8', errors='strict')
+        except Exception:
+            # fallback to latin-1
+            Path(bin_path).write_text(txt, encoding='latin-1', errors='strict')
+
+    # Re-run validation with JAR (same as validate-jar-by-upload minimal subset)
+    from core.saft_validator import parse_xml, extract_cli_params
+    try:
+        data = await asyncio.to_thread(lambda: open(bin_path, 'rb').read())
+        root = parse_xml(data)
+        params = extract_cli_params(root)
+        nif = params.get('nif'); year = params.get('year'); month = params.get('month')
+    except Exception as e:
+        return { 'ok': False, 'error': f'Invalid XML after fixes: {e}', 'path': bin_path }
+
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    u = await repo.get(current['username'])
+    if not u:
+        raise HTTPException(status_code=401, detail=USER_NOT_FOUND)
+    selected_pass = await _select_at_password(repo, current['username'], nif)
+
+    jar_path = _jar_path()
+    if selected_pass:
+        cmd = ['java','-jar',jar_path,'-n',nif,'-p',selected_pass,'-a',year,'-m',month,'-op','validar','-i',bin_path]
+        safe_cmd = [ ('***' if part==selected_pass else part) for part in cmd ]
+    else:
+        cmd = ['java','-jar',jar_path,'-op','validar','-i',bin_path]
+        safe_cmd = list(cmd)
+    TIMEOUT = int(os.getenv('FACTEMICLI_TIMEOUT','300'))
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return { 'ok': False, 'timeout': True, 'cmd_masked': safe_cmd, 'jar_path': jar_path }
+        stdout_str = stdout.decode() if stdout else ''
+        stderr_str = stderr.decode() if stderr else ''
+        # success based on XML code
+        try:
+            from core.saft_archiver import is_validation_successful, parse_jar_response_xml
+            ok = is_validation_successful(stdout_str, proc.returncode)
+            stats = None
+            try:
+                stats = parse_jar_response_xml(stdout_str)
+            except Exception:
+                stats = None
+        except Exception:
+            ok = (proc.returncode == 0)
+            stats = None
+        detailed_issues = _detect_issues_from_stdout(stdout_str, bin_path)
+        limit = 10000
+        def trunc(s: str) -> str:
+            if s is None: return ''
+            return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
+        resp = {
+            'ok': ok,
+            'returncode': proc.returncode,
+            'stdout': trunc(stdout_str),
+            'stderr': trunc(stderr_str),
+            'args': {'nif':nif,'year':year,'month':month},
+            'cmd_masked': safe_cmd,
+            'jar_path': jar_path,
+            'applied': applied
+        }
+        if stats is not None:
+            resp['statistics'] = {k:v for k,v in stats.items() if k != 'raw_xml'}
+        if detailed_issues:
+            resp['issues'] = detailed_issues
+        return resp
+    except Exception as e:
+        return { 'ok': False, 'error': f'{e.__class__.__name__}: {e}', 'applied': applied }
 
 
 @router.get("/health")
@@ -257,16 +603,53 @@ async def validate_with_jar_by_upload(
         except asyncio.TimeoutError:
             proc.kill()
             return { 'ok': False, 'timeout': True, 'cmd_masked': safe_cmd, 'jar_path': jar_path }
-        ok = (proc.returncode == 0)
+        # Determine true success from JAR response XML, not only return code
+        try:
+            from core.saft_archiver import is_validation_successful, parse_jar_response_xml
+        except Exception:
+            is_validation_successful = lambda s, rc: (proc.returncode == 0)
+            parse_jar_response_xml = None
+        # Decode outputs (needed for parsing)
         stdout_str = stdout.decode() if stdout else ''
         stderr_str = stderr.decode() if stderr else ''
+        is_successful = is_validation_successful(stdout_str, proc.returncode) if is_validation_successful else (proc.returncode == 0)
+        stats = None
+        if parse_jar_response_xml:
+            try:
+                stats = parse_jar_response_xml(stdout_str)
+            except Exception:
+                stats = None
+        ok = is_successful
+        # Detect detailed issues from stdout and the uploaded XML path
+        print("=" * 80)
+        print(f"[DEBUG] validate-jar-by-upload: JAR EXECUTION RESULT")
+        print(f"  upload_id: {upload_id}")
+        print(f"  operation: {operation}")
+        print(f"  returncode: {proc.returncode}")
+        print(f"  is_successful: {is_successful}")
+        print(f"  ok: {ok}")
+        print(f"  stdout length: {len(stdout_str)}")
+        print(f"  stderr length: {len(stderr_str)}")
+        print(f"  STDOUT (first 1000 chars):")
+        print(stdout_str[:1000])
+        print("=" * 80)
+
+        detailed_issues = _detect_issues_from_stdout(stdout_str, bin_path)
+
+        print(f"[DEBUG] validate-jar-by-upload: detailed_issues count: {len(detailed_issues)}")
+        if detailed_issues:
+            import json
+            print(f"[DEBUG] validate-jar-by-upload: issues JSON:")
+            print(json.dumps(detailed_issues, indent=2, ensure_ascii=False))
+        print("=" * 80)
+
         # No archive here to keep response smaller; UI will handle like other endpoints
         limit = 10000 if not full else None
         def trunc(s: str) -> str:
             if s is None: return ''
             if limit is None: return s
             return s if len(s) <= limit else (s[:limit] + '\n... [truncated]')
-        return {
+        resp_obj = {
             'ok': ok,
             'returncode': proc.returncode,
             'stdout': trunc(stdout_str),
@@ -275,6 +658,117 @@ async def validate_with_jar_by_upload(
             'cmd_masked': safe_cmd,
             'jar_path': jar_path
         }
+        if stats is not None:
+            resp_obj['statistics'] = {k:v for k,v in stats.items() if k != 'raw_xml'}
+            if stats.get('raw_xml') and full:
+                resp_obj['response_xml'] = stats.get('raw_xml')
+        if detailed_issues:
+            resp_obj['issues'] = detailed_issues
+            print(f"[DEBUG] validate-jar-by-upload: Added {len(detailed_issues)} issues to response")
+        else:
+            print(f"[DEBUG] validate-jar-by-upload: NO issues to add to response")
+
+        # Save to B2 and history if validation was successful
+        storage_key = None
+        validation_id = None
+        if ok and operation == 'validar':
+            try:
+                print(f"[DEBUG] validate-jar-by-upload: Starting B2/history save process")
+                print(f"[DEBUG]   - upload_id: {upload_id}")
+                print(f"[DEBUG]   - nif: {nif}")
+                print(f"[DEBUG]   - year: {year}")
+                print(f"[DEBUG]   - month: {month}")
+                print(f"[DEBUG]   - operation: {operation}")
+                print(f"[DEBUG]   - username: {current['username']}")
+
+                import tempfile
+                import zipfile
+                from core.saft_archiver import generate_storage_key
+                from core.validation_history import ValidationHistoryRepo
+
+                # Read metadata to get original filename
+                with open(meta_path, 'r', encoding='utf-8') as f:
+                    import json
+                    metadata = json.load(f)
+                original_filename = metadata.get('filename', 'saft.xml')
+                print(f"[DEBUG] validate-jar-by-upload: Original filename: {original_filename}")
+
+                # Create ZIP with XML and response
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+                    temp_zip_path = temp_zip.name
+                print(f"[DEBUG] validate-jar-by-upload: Created temp ZIP at: {temp_zip_path}")
+
+                with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    # Add XML file
+                    zf.write(bin_path, original_filename)
+                    # Add response XML if available
+                    if stats and stats.get('raw_xml'):
+                        response_filename = original_filename.replace('.xml', '_response.xml')
+                        zf.writestr(response_filename, stats['raw_xml'])
+                        print(f"[DEBUG] validate-jar-by-upload: Added response XML to ZIP")
+
+                # Generate storage key with timestamp format: NIF_YEAR_MONTH_DDHHMMSS.zip
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%d%H%M%S')
+                zip_filename = f"{nif}_{year}_{month}_{timestamp}.zip"
+                storage_key = generate_storage_key(nif, year, month, zip_filename, country=country)
+                print(f"[DEBUG] validate-jar-by-upload: Generated storage key: {storage_key}")
+                print(f"[DEBUG] validate-jar-by-upload: ZIP filename: {zip_filename}")
+
+                # Upload to B2
+                storage = Storage()
+                print(f"[DEBUG] validate-jar-by-upload: Uploading to B2 bucket: {storage.bucket}")
+                storage.client.upload_file(temp_zip_path, storage.bucket, storage_key)
+                print(f"[DEBUG] validate-jar-by-upload: ✅ Uploaded to B2 successfully")
+
+                # Save to validation history
+                history_repo = ValidationHistoryRepo(db, country=country)
+                print(f"[DEBUG] validate-jar-by-upload: Saving to validation history...")
+                print(f"[DEBUG]   - country: {country}")
+                print(f"[DEBUG]   - storage_key: {storage_key}")
+
+                validation_id = await history_repo.save_validation(
+                    username=current['username'],
+                    nif=nif,
+                    year=year,
+                    month=month,
+                    operation=operation,
+                    jar_stdout=stdout_str,
+                    jar_stderr=stderr_str,
+                    returncode=proc.returncode,
+                    file_info={
+                        'name': original_filename,
+                        'size': os.path.getsize(bin_path)
+                    },
+                    statistics=stats if stats else None,
+                    response_xml=stats.get('raw_xml') if stats else None,
+                    storage_key=storage_key
+                )
+                print(f"[DEBUG] validate-jar-by-upload: ✅ Saved to history with validation_id: {validation_id}")
+
+                if validation_id:
+                    print(f"[DEBUG] validate-jar-by-upload: ✅ Database insert successful")
+                else:
+                    print(f"[WARNING] validate-jar-by-upload: ⚠️ validation_id is None - database insert may have failed")
+
+                # Add to response
+                resp_obj['storage_key'] = storage_key
+                resp_obj['validation_id'] = validation_id
+
+                # Clean up temp file
+                try:
+                    os.unlink(temp_zip_path)
+                except:
+                    pass
+
+            except Exception as save_error:
+                print(f"[ERROR] validate-jar-by-upload: Failed to save to B2/history: {save_error}")
+                import traceback
+                traceback.print_exc()
+                # Don't fail the request, just log the error
+                resp_obj['save_error'] = str(save_error)
+
+        return resp_obj
     except Exception as e:
         return { 'ok': False, 'error': f'{e.__class__.__name__}: {e}' }
 
@@ -326,6 +820,83 @@ async def list_at_entries(
             updated_str = updated_val
         items.append(ATEntryOut(ident=masked, updated_at=updated_str))
     return ATEntryListOut(ok=True, items=items)
+
+
+@router.get('/secrets/at/entries-full', response_model=ATEntryListOut)
+async def list_at_entries_full(
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """List credential entries with FULL passwords (decrypted) for the current user."""
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+    entries = await repo.get_at_entries(current['username'])
+    items = []
+    for enc_ident, meta in entries.items():
+        ident = None
+        password = None
+        try:
+            ident = decrypt(enc_ident)
+        except Exception:
+            pass
+        if not ident:
+            continue
+
+        # Decrypt password
+        enc_password = meta.get('pass') if isinstance(meta, dict) else None
+        if enc_password:
+            try:
+                password = decrypt(enc_password)
+            except Exception:
+                password = '***error***'
+
+        updated_val = meta.get('updated_at') if isinstance(meta, dict) else None
+        updated_str = None
+        if hasattr(updated_val, 'isoformat'):
+            try:
+                updated_str = updated_val.isoformat()
+            except Exception:
+                updated_str = None
+        elif isinstance(updated_val, str):
+            updated_str = updated_val
+
+        items.append(ATEntryOut(ident=ident, password=password, updated_at=updated_str))
+    return ATEntryListOut(ok=True, items=items)
+
+
+@router.delete('/secrets/at/entry/{nif}')
+async def delete_at_entry(
+    nif: str,
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Delete a credential entry for the current user."""
+    country = get_country(request)
+    repo = UsersRepo(db, country)
+
+    # Get all entries
+    entries = await repo.get_at_entries(current['username'])
+
+    # Find the encrypted key that matches this NIF
+    enc_key_to_delete = None
+    for enc_ident in entries.keys():
+        try:
+            ident = decrypt(enc_ident)
+            if ident == nif:
+                enc_key_to_delete = enc_ident
+                break
+        except Exception:
+            continue
+
+    if not enc_key_to_delete:
+        raise HTTPException(status_code=404, detail='NIF not found')
+
+    # Delete the entry
+    await repo.delete_at_entry(current['username'], enc_key_to_delete)
+
+    return {'ok': True, 'message': f'Credential for NIF {nif} deleted'}
 
 
 async def _select_at_password(repo: UsersRepo, username: str, nif: str) -> str | None:
@@ -1168,6 +1739,81 @@ async def get_validation_history(
     }
 
 
+@router.delete("/validation-history/{record_id}")
+async def delete_validation_history(
+    record_id: str,
+    request: Request,
+    current=Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """
+    Delete a validation history record by ID
+    Only the owner can delete their own records
+    """
+    from core.validation_history import ValidationHistoryRepo
+    from bson import ObjectId
+
+    country = get_country(request)
+    username = current["username"]
+
+    history_repo = ValidationHistoryRepo(db, country=country)
+
+    # Verify ownership before deleting
+    try:
+        record = await history_repo.get_by_id(record_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid record ID format")
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    if record.get('username') != username:
+        raise HTTPException(status_code=403, detail="You can only delete your own records")
+
+    # Delete from B2 if storage_key exists
+    storage_key = record.get('storage_key')
+    b2_deleted = False
+    b2_error = None
+
+    if storage_key:
+        try:
+            from core.storage import Storage
+            storage = Storage()
+
+            print(f"[DELETE-HISTORY] Deleting from B2: {storage_key}")
+
+            # Delete from B2
+            storage.client.delete_object(
+                Bucket=storage.bucket,
+                Key=storage_key
+            )
+
+            b2_deleted = True
+            print(f"[DELETE-HISTORY] Successfully deleted from B2: {storage_key}")
+
+        except Exception as e:
+            # Log error but don't fail the entire operation
+            print(f"[DELETE-HISTORY] Failed to delete from B2: {e}")
+            b2_error = str(e)
+
+    # Delete the database record
+    result = await history_repo.collection.delete_one({'_id': ObjectId(record_id)})
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    response = {
+        'ok': True,
+        'message': 'Validation record deleted successfully',
+        'b2_deleted': b2_deleted
+    }
+
+    if b2_error:
+        response['b2_warning'] = f'Database record deleted but B2 file deletion failed: {b2_error}'
+
+    return response
+
+
 @router.post("/submit")
 async def submit(
     request: Request, object_key: str, current=Depends(get_current_user), db=Depends(get_db)
@@ -1243,3 +1889,331 @@ async def submit(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to invoke JAR: {e.__class__.__name__}: {str(e)}")
+
+
+# ==================== Fix Rules Management Endpoints ====================
+
+@router.get('/fix-rules')
+async def get_fix_rules(current=Depends(get_current_user)):
+    """Get all custom fix rules"""
+    manager = get_rules_manager()
+    return {
+        'ok': True,
+        'rules': manager.get_all_rules()
+    }
+
+@router.post('/fix-rules')
+async def add_fix_rule(request: Request, current=Depends(get_current_user)):
+    """
+    Add a new custom fix rule.
+
+    Body example:
+    {
+        "id": "my_custom_rule",
+        "name": "My Custom Rule",
+        "pattern": {
+            "type": "regex",
+            "match": "Linha:\\s*(?P<line>\\d+).*?MyError",
+            "flags": ["IGNORECASE"]
+        },
+        "code": "MY_CUSTOM_ERROR",
+        "suggestions": [
+            {
+                "label": "Option 1",
+                "value": "Fix 1"
+            }
+        ],
+        "fix_type": "custom",
+        "enabled": true
+    }
+    """
+    try:
+        body = await request.json()
+        rule = body.get('rule')
+        if not rule:
+            raise HTTPException(status_code=400, detail='rule object required')
+
+        # Validate required fields
+        if not rule.get('id'):
+            raise HTTPException(status_code=400, detail='rule.id required')
+        if not rule.get('pattern'):
+            raise HTTPException(status_code=400, detail='rule.pattern required')
+
+        manager = get_rules_manager()
+        success = manager.add_rule(rule, username=current.get('username', 'user'))
+
+        if success:
+            return {'ok': True, 'message': 'Rule added successfully'}
+        else:
+            raise HTTPException(status_code=500, detail='Failed to save rule')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to add rule: {str(e)}')
+
+@router.delete('/fix-rules/{rule_id}')
+async def disable_fix_rule(rule_id: str, current=Depends(get_current_user)):
+    """Disable a fix rule"""
+    manager = get_rules_manager()
+    success = manager.disable_rule(rule_id)
+    if success:
+        return {'ok': True, 'message': f'Rule {rule_id} disabled'}
+    else:
+        raise HTTPException(status_code=404, detail='Rule not found')
+
+
+# ==================== Extract Documents from XML ====================
+
+@router.post('/upload/extract-documents')
+async def extract_documents_from_upload(request: Request, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Extract all documents (invoices) from uploaded SAFT XML file
+    """
+    body = await request.json()
+    upload_id = body.get('upload_id')
+    if not upload_id:
+        raise HTTPException(status_code=400, detail='upload_id required')
+
+    meta_path, bin_path = _upload_paths(upload_id)
+    if not os.path.isfile(bin_path):
+        raise HTTPException(status_code=404, detail='Upload file not found')
+
+    try:
+        import xml.etree.ElementTree as ET
+
+        # Read XML file
+        print(f"[DOCS] Extracting documents from {bin_path}")
+        tree = ET.parse(bin_path)
+        root = tree.getroot()
+
+        # Define namespace (SAFT-PT uses a specific namespace)
+        ns = {'saft': 'urn:OECD:StandardAuditFile-Tax:PT_1.04_01'}
+
+        # Try to detect namespace from root
+        if root.tag.startswith('{'):
+            detected_ns = root.tag[root.tag.find('{')+1:root.tag.find('}')]
+            ns = {'saft': detected_ns}
+            print(f"[DOCS] Detected namespace: {detected_ns}")
+
+        documents = []
+
+        # Extract SalesInvoices (SourceDocuments/SalesInvoices/Invoice)
+        sales_invoices_path = './/saft:SourceDocuments/saft:SalesInvoices/saft:Invoice'
+        invoices = root.findall(sales_invoices_path, ns)
+
+        # If namespace doesn't work, try without it
+        if len(invoices) == 0:
+            print("[DOCS] No documents found with namespace, trying without namespace")
+            sales_invoices_path = './/SourceDocuments/SalesInvoices/Invoice'
+            invoices = root.findall(sales_invoices_path)
+
+        print(f"[DOCS] Found {len(invoices)} invoices")
+
+        for inv in invoices:
+            try:
+                # Helper function to safely get text
+                def get_text(elem, path, default=''):
+                    found = elem.find(path, ns) if ns else elem.find(path)
+                    if found is None:
+                        # Try without namespace
+                        path_without_ns = path.replace('saft:', '')
+                        found = elem.find(path_without_ns)
+                    return found.text if found is not None and found.text else default
+
+                doc = {
+                    'InvoiceNo': get_text(inv, 'saft:InvoiceNo') or get_text(inv, 'InvoiceNo'),
+                    'InvoiceDate': get_text(inv, 'saft:InvoiceDate') or get_text(inv, 'InvoiceDate'),
+                    'InvoiceType': get_text(inv, 'saft:InvoiceType') or get_text(inv, 'InvoiceType'),
+                    'DocumentStatus': get_text(inv, 'saft:DocumentStatus/saft:InvoiceStatus') or get_text(inv, 'DocumentStatus/InvoiceStatus'),
+                    'CustomerID': get_text(inv, 'saft:CustomerID') or get_text(inv, 'CustomerID'),
+                    'CustomerName': '',  # Will try to fetch from MasterFiles later
+                    'NetTotal': get_text(inv, 'saft:DocumentTotals/saft:NetTotal') or get_text(inv, 'DocumentTotals/NetTotal') or '0',
+                    'TaxPayable': get_text(inv, 'saft:DocumentTotals/saft:TaxPayable') or get_text(inv, 'DocumentTotals/TaxPayable') or '0',
+                    'GrossTotal': get_text(inv, 'saft:DocumentTotals/saft:GrossTotal') or get_text(inv, 'DocumentTotals/GrossTotal') or '0',
+                }
+
+                documents.append(doc)
+            except Exception as e:
+                print(f"[DOCS] Error extracting invoice: {e}")
+                continue
+
+        # Try to match CustomerNames from MasterFiles
+        try:
+            customers_path = './/saft:MasterFiles/saft:Customer'
+            customers = root.findall(customers_path, ns)
+
+            if len(customers) == 0:
+                customers_path = './/MasterFiles/Customer'
+                customers = root.findall(customers_path)
+
+            # Create a mapping of CustomerID -> CustomerName
+            customer_names = {}
+            for cust in customers:
+                cust_id = get_text(cust, 'saft:CustomerID') or get_text(cust, 'CustomerID')
+                cust_name = get_text(cust, 'saft:CompanyName') or get_text(cust, 'CompanyName')
+                if cust_id:
+                    customer_names[cust_id] = cust_name
+
+            # Match names
+            for doc in documents:
+                if doc['CustomerID'] in customer_names:
+                    doc['CustomerName'] = customer_names[doc['CustomerID']]
+        except Exception as e:
+            print(f"[DOCS] Could not match customer names: {e}")
+
+        print(f"[DOCS] Returning {len(documents)} documents")
+        return {
+            'ok': True,
+            'documents': documents,
+            'total': len(documents)
+        }
+
+    except ET.ParseError as e:
+        print(f"[DOCS] XML Parse Error: {e}")
+        raise HTTPException(status_code=400, detail=f'Invalid XML: {str(e)}')
+    except Exception as e:
+        print(f"[DOCS] Error extracting documents: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to extract documents: {str(e)}')
+
+
+@router.post('/history/extract-documents')
+async def extract_documents_from_storage(request: Request, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Extract all documents (invoices) from SAFT XML file stored in B2/storage
+    """
+    body = await request.json()
+    storage_key = body.get('storage_key')
+    if not storage_key:
+        raise HTTPException(status_code=400, detail='storage_key required')
+
+    country = get_country(request)
+    storage = Storage()
+
+    try:
+        import xml.etree.ElementTree as ET
+        import tempfile
+
+        # Fetch file from storage to temporary location
+        print(f"[DOCS] Fetching file from storage: {storage_key}")
+        local_path = await storage.fetch_to_local(country, storage_key)
+
+        # The storage_key points to a ZIP file, so we need to extract the XML
+        import zipfile
+
+        # Check if it's a ZIP file
+        if storage_key.endswith('.zip'):
+            print(f"[DOCS] Extracting XML from ZIP: {local_path}")
+            with zipfile.ZipFile(local_path, 'r') as zip_ref:
+                # Find XML file in ZIP
+                xml_files = [f for f in zip_ref.namelist() if f.endswith('.xml')]
+                if not xml_files:
+                    raise HTTPException(status_code=400, detail='No XML file found in ZIP')
+
+                # Extract first XML file to temp location
+                xml_filename = xml_files[0]
+                print(f"[DOCS] Found XML in ZIP: {xml_filename}")
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp:
+                    tmp.write(zip_ref.read(xml_filename))
+                    xml_path = tmp.name
+        else:
+            # Direct XML file
+            xml_path = local_path
+
+        # Read and parse XML file
+        print(f"[DOCS] Parsing XML: {xml_path}")
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+
+        # Define namespace
+        ns = {'saft': 'urn:OECD:StandardAuditFile-Tax:PT_1.04_01'}
+
+        # Try to detect namespace from root
+        if root.tag.startswith('{'):
+            detected_ns = root.tag[root.tag.find('{')+1:root.tag.find('}')]
+            ns = {'saft': detected_ns}
+            print(f"[DOCS] Detected namespace: {detected_ns}")
+
+        documents = []
+
+        # Build customer map (for customer names)
+        customers = {}
+        customers_path = './/saft:MasterFiles/saft:Customer'
+        for customer in root.findall(customers_path, ns):
+            cust_id_elem = customer.find('saft:CustomerID', ns)
+            cust_name_elem = customer.find('saft:CompanyName', ns)
+            if cust_id_elem is not None and cust_name_elem is not None:
+                customers[cust_id_elem.text] = cust_name_elem.text
+
+        # Extract SalesInvoices
+        sales_invoices_path = './/saft:SourceDocuments/saft:SalesInvoices/saft:Invoice'
+        invoices = root.findall(sales_invoices_path, ns)
+
+        # If namespace doesn't work, try without it
+        if len(invoices) == 0:
+            print("[DOCS] No documents found with namespace, trying without namespace")
+            sales_invoices_path = './/SourceDocuments/SalesInvoices/Invoice'
+            invoices = root.findall(sales_invoices_path)
+            ns = None
+
+        print(f"[DOCS] Found {len(invoices)} invoices")
+
+        for inv in invoices:
+            try:
+                # Helper function to safely get text
+                def get_text(elem, path, default=''):
+                    found = elem.find(path, ns) if ns else elem.find(path)
+                    return found.text if found is not None and found.text else default
+
+                invoice_no = get_text(inv, 'saft:InvoiceNo' if ns else 'InvoiceNo')
+                invoice_date = get_text(inv, 'saft:InvoiceDate' if ns else 'InvoiceDate')
+                invoice_type = get_text(inv, 'saft:InvoiceType' if ns else 'InvoiceType')
+                customer_id = get_text(inv, 'saft:CustomerID' if ns else 'CustomerID')
+
+                # Get totals
+                doc_totals = inv.find('saft:DocumentTotals' if ns else 'DocumentTotals', ns) if ns else inv.find('DocumentTotals')
+                net_total = get_text(doc_totals, 'saft:NetTotal' if ns else 'NetTotal', '0') if doc_totals is not None else '0'
+                tax_payable = get_text(doc_totals, 'saft:TaxPayable' if ns else 'TaxPayable', '0') if doc_totals is not None else '0'
+                gross_total = get_text(doc_totals, 'saft:GrossTotal' if ns else 'GrossTotal', '0') if doc_totals is not None else '0'
+
+                # Get document status
+                doc_status = inv.find('saft:DocumentStatus' if ns else 'DocumentStatus', ns) if ns else inv.find('DocumentStatus')
+                status_code = get_text(doc_status, 'saft:InvoiceStatus' if ns else 'InvoiceStatus', 'N') if doc_status is not None else 'N'
+
+                documents.append({
+                    'InvoiceNo': invoice_no,
+                    'InvoiceDate': invoice_date,
+                    'InvoiceType': invoice_type,
+                    'CustomerID': customer_id,
+                    'CustomerName': customers.get(customer_id, ''),
+                    'NetTotal': net_total,
+                    'TaxPayable': tax_payable,
+                    'GrossTotal': gross_total,
+                    'DocumentStatus': status_code
+                })
+
+            except Exception as e:
+                print(f"[DOCS] Error processing invoice: {e}")
+                continue
+
+        # Clean up temp file if we created one
+        if storage_key.endswith('.zip') and xml_path != local_path:
+            try:
+                os.unlink(xml_path)
+            except:
+                pass
+
+        print(f"[DOCS] Returning {len(documents)} documents from storage")
+        return {
+            'ok': True,
+            'documents': documents,
+            'total': len(documents)
+        }
+
+    except ET.ParseError as e:
+        print(f"[DOCS] XML Parse Error: {e}")
+        raise HTTPException(status_code=400, detail=f'Invalid XML: {str(e)}')
+    except Exception as e:
+        print(f"[DOCS] Error extracting documents from storage: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f'Failed to extract documents: {str(e)}')

@@ -351,7 +351,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=39"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -398,6 +398,7 @@
 
         <div class="tabs">
             <button class="tab active" data-tab="app" onclick="showTab('app')">📄 Validação</button>
+            <button class="tab" data-tab="docs" onclick="showTab('docs')">📋 Documentos</button>
             <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
             <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
             <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
@@ -436,6 +437,9 @@
                         </button>
                         <button class="btn" id="btn-validate" onclick="validate()">
                             <span>✓</span> Validação básica
+                        </button>
+                        <button class="btn btn-info" onclick="checkDocs()">
+                            <span>📄</span> Checkar os Docs
                         </button>
                         <button class="btn" onclick="presignUpload()">
                             <span>☁️</span> Upload via Presign
@@ -509,7 +513,110 @@
                     <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
                     <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
                     <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
-                        <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
+                    <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
+                    <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Documentos -->
+        <div id="panel-docs" class="tabpanel">
+            <div class="card">
+                <div class="log-header">
+                    <h3>📋 Documentos no Ficheiro SAFT</h3>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToCSV()">📥 Exportar CSV</button>
+                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToExcel()">📊 Exportar Excel</button>
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
+                </p>
+
+                <!-- Filtros -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Pesquisar</label>
+                        <input type="text" id="docs-search" placeholder="Número, Cliente, Valor..."
+                               oninput="filterDocsTable()"
+                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tipo Documento</label>
+                        <select id="docs-filter-type" onchange="filterDocsTable()"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                            <option value="">Todos</option>
+                            <option value="FT">Fatura (FT)</option>
+                            <option value="NC">Nota Crédito (NC)</option>
+                            <option value="ND">Nota Débito (ND)</option>
+                            <option value="FR">Fatura Recibo (FR)</option>
+                            <option value="GT">Guia Transporte (GT)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select id="docs-filter-status" onchange="filterDocsTable()"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                            <option value="">Todos</option>
+                            <option value="N">Normal (N)</option>
+                            <option value="A">Anulado (A)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Estatísticas -->
+                <div id="docs-stats" style="display:none; margin-bottom:1rem; padding:1rem; background:#f8fafc; border-radius:6px;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:1rem;">
+                        <div>
+                            <div style="font-size:0.875rem; color:#64748b;">Total Documentos</div>
+                            <div id="stats-total" style="font-size:1.5rem; font-weight:600; color:#0f172a;">0</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.875rem; color:#64748b;">Valor Total</div>
+                            <div id="stats-total-value" style="font-size:1.5rem; font-weight:600; color:#10b981;">€ 0.00</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.875rem; color:#64748b;">Faturas</div>
+                            <div id="stats-ft" style="font-size:1.5rem; font-weight:600; color:#2563eb;">0</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.875rem; color:#64748b;">Notas Crédito</div>
+                            <div id="stats-nc" style="font-size:1.5rem; font-weight:600; color:#ef4444;">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Documentos -->
+                <div style="overflow-x: auto;">
+                    <table id="docs-table" style="width:100%; border-collapse: collapse; font-size:0.875rem;">
+                        <thead style="background:#f1f5f9; position:sticky; top:0;">
+                            <tr>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">#</th>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Tipo</th>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Número</th>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Data</th>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Cliente ID</th>
+                                <th style="padding:0.75rem; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Cliente Nome</th>
+                                <th style="padding:0.75rem; text-align:right; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Valor s/ IVA</th>
+                                <th style="padding:0.75rem; text-align:right; border-bottom:2px solid #e2e8f0; white-space:nowrap;">IVA</th>
+                                <th style="padding:0.75rem; text-align:right; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Total</th>
+                                <th style="padding:0.75rem; text-align:center; border-bottom:2px solid #e2e8f0; white-space:nowrap;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docs-table-body">
+                            <tr>
+                                <td colspan="10" style="padding:2rem; text-align:center; color:#94a3b8;">
+                                    Faz upload de um ficheiro SAFT e clica no botão "📄 Checkar os Docs"
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Loading indicator -->
+                <div id="docs-loading" style="display:none; text-align:center; padding:2rem;">
+                    <div style="display:inline-block; width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite;"></div>
+                    <div style="margin-top:1rem; color:#64748b;">A carregar documentos...</div>
                 </div>
             </div>
         </div>
@@ -519,7 +626,10 @@
             <div class="card">
                 <div class="log-header">
                     <h3>📜 Histórico de Validações</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Atualizar</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Atualizar</button>
+                        <button class="btn btn-secondary btn-sm" onclick="exportHistoryToExcel()">📊 Exportar Excel</button>
+                    </div>
                 </div>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem;">
                     Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
@@ -647,8 +757,45 @@
             </div>
 
             <div class="card">
-                <h3>📋 NIFs guardados</h3>
-                <pre id="nif_list" style="min-height: 120px;">(clique em "Listar NIFs guardados" para visualizar)</pre>
+                <div class="log-header">
+                    <h3>📋 NIFs guardados</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="loadNifEntriesTable()">🔄 Atualizar</button>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                    Tabela editável com todas as credenciais guardadas. Clique para editar ou eliminar.
+                </p>
+
+                <!-- Loading state -->
+                <div id="creds-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
+                    <div>A carregar credenciais...</div>
+                </div>
+
+                <!-- Empty state -->
+                <div id="creds-empty" style="display: block; text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+                    <h4>Nenhuma credencial guardada</h4>
+                    <p>Adicione credenciais usando o formulário acima.</p>
+                </div>
+
+                <!-- Results table -->
+                <div id="creds-results" style="display: none;">
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
+                                    <th style="padding: 0.75rem; text-align: left;">NIF</th>
+                                    <th style="padding: 0.75rem; text-align: left;">Password AT</th>
+                                    <th style="padding: 0.75rem; text-align: left;">Última Atualização</th>
+                                    <th style="padding: 0.75rem; text-align: center;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="creds-table-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
