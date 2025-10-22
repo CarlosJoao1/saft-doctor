@@ -11,7 +11,7 @@ from core.models import ATSecretIn, ATSecretOut, PresignUploadIn, PresignUploadO
 from core.storage import Storage
 from core.submitter import Submitter
 from core.analysis_repo import AnalysisRepo
-from core.fix_rules import get_rules_manager, detect_issue_with_rules
+# from core.fix_rules import get_rules_manager, detect_issue_with_rules  # Not needed for this release
 import os
 import os.path
 import subprocess
@@ -144,12 +144,12 @@ def _detect_issues_from_stdout(stdout: str, xml_path: str) -> list[dict]:
     for msg in errors:
         print(f"[DEBUG] _detect_issues_from_stdout: Analyzing error: {msg[:100]}...")
 
-        # Try custom rules FIRST
-        custom_issue = detect_issue_with_rules(msg, xml_path)
-        if custom_issue:
-            print(f"[DEBUG] _detect_issues_from_stdout: MATCH via custom rule! code={custom_issue.get('code')}, rule_id={custom_issue.get('rule_id')}")
-            issues.append(custom_issue)
-            continue
+        # Try custom rules FIRST (disabled for this release)
+        # custom_issue = detect_issue_with_rules(msg, xml_path)
+        # if custom_issue:
+        #     print(f"[DEBUG] _detect_issues_from_stdout: MATCH via custom rule! code={custom_issue.get('code')}, rule_id={custom_issue.get('rule_id')}")
+        #     issues.append(custom_issue)
+        #     continue
 
         # Pattern 1: Country invalid (PT JAR message)
         m = re.search(r"O valor \(\"(?P<val>[^\"]+)\"\) no elemento \"Country\" do \"Customer\" com id (?P<cid>[A-Za-z0-9_\-]+)", msg)
@@ -1893,73 +1893,44 @@ async def submit(
 
 # ==================== Fix Rules Management Endpoints ====================
 
-@router.get('/fix-rules')
-async def get_fix_rules(current=Depends(get_current_user)):
-    """Get all custom fix rules"""
-    manager = get_rules_manager()
-    return {
-        'ok': True,
-        'rules': manager.get_all_rules()
-    }
+# Custom fix rules endpoints - disabled for this release
+# @router.get('/fix-rules')
+# async def get_fix_rules(current=Depends(get_current_user)):
+#     """Get all custom fix rules"""
+#     manager = get_rules_manager()
+#     return {
+#         'ok': True,
+#         'rules': manager.get_all_rules()
+#     }
 
-@router.post('/fix-rules')
-async def add_fix_rule(request: Request, current=Depends(get_current_user)):
-    """
-    Add a new custom fix rule.
+# @router.post('/fix-rules')
+# async def add_fix_rule(request: Request, current=Depends(get_current_user)):
+#     """Add a new custom fix rule."""
+#     try:
+#         body = await request.json()
+#         rule = body.get('rule')
+#         if not rule:
+#             raise HTTPException(status_code=400, detail='rule object required')
+#         manager = get_rules_manager()
+#         success = manager.add_rule(rule, username=current.get('username', 'user'))
+#         if success:
+#             return {'ok': True, 'message': 'Rule added successfully'}
+#         else:
+#             raise HTTPException(status_code=500, detail='Failed to save rule')
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f'Failed to add rule: {str(e)}')
 
-    Body example:
-    {
-        "id": "my_custom_rule",
-        "name": "My Custom Rule",
-        "pattern": {
-            "type": "regex",
-            "match": "Linha:\\s*(?P<line>\\d+).*?MyError",
-            "flags": ["IGNORECASE"]
-        },
-        "code": "MY_CUSTOM_ERROR",
-        "suggestions": [
-            {
-                "label": "Option 1",
-                "value": "Fix 1"
-            }
-        ],
-        "fix_type": "custom",
-        "enabled": true
-    }
-    """
-    try:
-        body = await request.json()
-        rule = body.get('rule')
-        if not rule:
-            raise HTTPException(status_code=400, detail='rule object required')
-
-        # Validate required fields
-        if not rule.get('id'):
-            raise HTTPException(status_code=400, detail='rule.id required')
-        if not rule.get('pattern'):
-            raise HTTPException(status_code=400, detail='rule.pattern required')
-
-        manager = get_rules_manager()
-        success = manager.add_rule(rule, username=current.get('username', 'user'))
-
-        if success:
-            return {'ok': True, 'message': 'Rule added successfully'}
-        else:
-            raise HTTPException(status_code=500, detail='Failed to save rule')
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Failed to add rule: {str(e)}')
-
-@router.delete('/fix-rules/{rule_id}')
-async def disable_fix_rule(rule_id: str, current=Depends(get_current_user)):
-    """Disable a fix rule"""
-    manager = get_rules_manager()
-    success = manager.disable_rule(rule_id)
-    if success:
-        return {'ok': True, 'message': f'Rule {rule_id} disabled'}
-    else:
-        raise HTTPException(status_code=404, detail='Rule not found')
+# @router.delete('/fix-rules/{rule_id}')
+# async def disable_fix_rule(rule_id: str, current=Depends(get_current_user)):
+#     """Disable a fix rule"""
+#     manager = get_rules_manager()
+#     success = manager.disable_rule(rule_id)
+#     if success:
+#         return {'ok': True, 'message': f'Rule {rule_id} disabled'}
+#     else:
+#         raise HTTPException(status_code=404, detail='Rule not found')
 
 
 # ==================== Extract Documents from XML ====================
