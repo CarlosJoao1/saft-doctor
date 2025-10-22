@@ -2496,21 +2496,21 @@ window.exportDocsToExcel = function() {
 
     // Add data rows
     docsToExport.forEach((doc, idx) => {
-        const netTotal = parseFloat(doc.net_total) || 0;
-        const taxPayable = parseFloat(doc.tax_payable) || 0;
-        const grossTotal = parseFloat(doc.gross_total) || 0;
+        const netTotal = parseFloat(doc.NetTotal) || 0;
+        const taxPayable = parseFloat(doc.TaxPayable) || 0;
+        const grossTotal = parseFloat(doc.GrossTotal) || 0;
 
         html += `
    <Row>
-    <Cell><Data ss:Type="String">${escapeXml(doc.type || '')}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(doc.number || '')}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(doc.date || '')}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(doc.customer_id || '')}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(doc.customer_name || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.InvoiceType || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.InvoiceNo || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.InvoiceDate || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.CustomerID || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.CustomerName || '')}</Data></Cell>
     <Cell><Data ss:Type="Number">${netTotal.toFixed(2)}</Data></Cell>
     <Cell><Data ss:Type="Number">${taxPayable.toFixed(2)}</Data></Cell>
     <Cell><Data ss:Type="Number">${grossTotal.toFixed(2)}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(doc.status || '')}</Data></Cell>
+    <Cell><Data ss:Type="String">${escapeXml(doc.DocumentStatus || '')}</Data></Cell>
    </Row>`;
 
         if (idx === 0) {
