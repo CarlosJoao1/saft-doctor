@@ -1364,6 +1364,87 @@ window.doLogin = async function() {
     await loginUser();
 };
 
+// Switch between login and register tabs
+window.showAuthTab = function(tab) {
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const loginTabBtn = document.getElementById('login-tab-btn');
+    const registerTabBtn = document.getElementById('register-tab-btn');
+
+    if (tab === 'login') {
+        loginForm.style.display = 'block';
+        registerForm.style.display = 'none';
+        loginTabBtn.style.background = '';
+        registerTabBtn.style.background = 'var(--text-secondary)';
+    } else if (tab === 'register') {
+        loginForm.style.display = 'none';
+        registerForm.style.display = 'block';
+        loginTabBtn.style.background = 'var(--text-secondary)';
+        registerTabBtn.style.background = '';
+    }
+};
+
+// Register new user
+window.doRegister = async function() {
+    const username = document.getElementById('register_user').value.trim();
+    const password = document.getElementById('register_pass').value;
+    const passwordConfirm = document.getElementById('register_pass_confirm').value;
+
+    if (!username || !password) {
+        alert('⚠️ Preencha username e password');
+        return;
+    }
+
+    if (password.length < 3) {
+        alert('⚠️ Password deve ter pelo menos 3 caracteres');
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        alert('⚠️ As passwords não coincidem');
+        return;
+    }
+
+    setStatus('✍️ A registar utilizador...', 'info');
+    logLine('Registar utilizador: ' + username);
+
+    try {
+        const response = await fetch('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username, password: password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Erro ao registar');
+        }
+
+        setStatus('✅ Conta criada com sucesso!', 'success');
+        logLine('✅ Utilizador registado: ' + username);
+
+        // Clear form
+        document.getElementById('register_user').value = '';
+        document.getElementById('register_pass').value = '';
+        document.getElementById('register_pass_confirm').value = '';
+
+        // Switch to login tab
+        showAuthTab('login');
+
+        // Fill login form with new credentials
+        document.getElementById('login_user').value = username;
+        document.getElementById('login_pass').value = password;
+
+        alert('✅ Conta criada com sucesso!\n\nAgora pode fazer login.');
+
+    } catch (e) {
+        setStatus('❌ Erro ao registar: ' + e.message, 'error');
+        logLine('❌ Erro ao registar: ' + e.message);
+        alert('❌ Erro ao registar:\n\n' + e.message);
+    }
+};
+
 window.loginDev = async function() {
     try {
         document.getElementById('login_user').value = 'dev';
