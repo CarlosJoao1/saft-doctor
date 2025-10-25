@@ -1733,7 +1733,20 @@ window.filterHelpItems = function() {
  */
 window.showProfileModal = async function() {
     const overlay = document.getElementById('profile-overlay');
-    if (!overlay) return;
+    if (!overlay) {
+        console.error('[PROFILE] Overlay element not found');
+        return;
+    }
+
+    // Check if user is logged in
+    if (!window.state || !window.state.token) {
+        console.error('[PROFILE] No token found in state');
+        alert('❌ Sessão expirada. Por favor, faça login novamente.');
+        logout();
+        return;
+    }
+
+    console.log('[PROFILE] Opening modal, token length:', window.state.token.length);
 
     // Show modal
     overlay.style.display = 'flex';
@@ -1743,15 +1756,21 @@ window.showProfileModal = async function() {
         const response = await fetch('/auth/profile', {
             method: 'GET',
             headers: {
-                'Authorization': 'Bearer ' + state.token
+                'Authorization': 'Bearer ' + window.state.token
             }
         });
 
+        console.log('[PROFILE] Response status:', response.status);
+
         if (!response.ok) {
-            throw new Error('Erro ao carregar perfil');
+            const errorData = await response.json().catch(() => ({}));
+            const errorMsg = errorData.detail || errorData.message || `HTTP ${response.status}`;
+            console.error('[PROFILE] Request failed:', errorMsg);
+            throw new Error(errorMsg);
         }
 
         const data = await response.json();
+        console.log('[PROFILE] Profile data received:', { username: data.username, hasEmail: !!data.email });
 
         // Fill form
         document.getElementById('profile-username').value = data.username || '';
@@ -1759,8 +1778,10 @@ window.showProfileModal = async function() {
 
         logLine('📋 Perfil carregado: ' + data.username);
     } catch (e) {
-        console.error('Error loading profile:', e);
+        console.error('[PROFILE] Error loading profile:', e);
         alert('❌ Erro ao carregar perfil:\n\n' + e.message);
+        // Close modal on error
+        overlay.style.display = 'none';
     }
 };
 
