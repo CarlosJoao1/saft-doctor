@@ -1364,29 +1364,38 @@ window.doLogin = async function() {
     await loginUser();
 };
 
-// Switch between login and register tabs
+// Switch between login, register, and password-reset tabs
 window.showAuthTab = function(tab) {
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
+    const passwordResetForm = document.getElementById('password-reset-form');
     const loginTabBtn = document.getElementById('login-tab-btn');
     const registerTabBtn = document.getElementById('register-tab-btn');
 
+    // Hide all forms
+    loginForm.style.display = 'none';
+    registerForm.style.display = 'none';
+    passwordResetForm.style.display = 'none';
+
     if (tab === 'login') {
         loginForm.style.display = 'block';
-        registerForm.style.display = 'none';
         loginTabBtn.style.background = '';
         registerTabBtn.style.background = 'var(--text-secondary)';
     } else if (tab === 'register') {
-        loginForm.style.display = 'none';
         registerForm.style.display = 'block';
         loginTabBtn.style.background = 'var(--text-secondary)';
         registerTabBtn.style.background = '';
+    } else if (tab === 'password-reset') {
+        passwordResetForm.style.display = 'block';
+        loginTabBtn.style.background = 'var(--text-secondary)';
+        registerTabBtn.style.background = 'var(--text-secondary)';
     }
 };
 
 // Register new user
 window.doRegister = async function() {
     const username = document.getElementById('register_user').value.trim();
+    const email = document.getElementById('register_email').value.trim();
     const password = document.getElementById('register_pass').value;
     const passwordConfirm = document.getElementById('register_pass_confirm').value;
 
@@ -1409,10 +1418,15 @@ window.doRegister = async function() {
     logLine('Registar utilizador: ' + username);
 
     try {
+        const payload = { username: username, password: password };
+        if (email) {
+            payload.email = email;
+        }
+
         const response = await fetch('/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username, password: password })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
@@ -1422,10 +1436,11 @@ window.doRegister = async function() {
         }
 
         setStatus('✅ Conta criada com sucesso!', 'success');
-        logLine('✅ Utilizador registado: ' + username);
+        logLine('✅ Utilizador registado: ' + username + (email ? ' (email: ' + email + ')' : ''));
 
         // Clear form
         document.getElementById('register_user').value = '';
+        document.getElementById('register_email').value = '';
         document.getElementById('register_pass').value = '';
         document.getElementById('register_pass_confirm').value = '';
 
@@ -1445,6 +1460,166 @@ window.doRegister = async function() {
     }
 };
 
+// Password Reset Functions
+
+// Request password reset
+window.requestPasswordReset = async function() {
+    const username = document.getElementById('reset_username').value.trim();
+
+    if (!username) {
+        alert('⚠️ Preencha o username');
+        return;
+    }
+
+    setStatus('📧 A enviar email de recuperação...', 'info');
+    logLine('Password reset solicitado para: ' + username);
+
+    try {
+        const response = await fetch('/auth/password-reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            logLine('✅ ' + data.message);
+            alert('✅ ' + data.message);
+
+            // Clear form and go back to login
+            document.getElementById('reset_username').value = '';
+            showAuthTab('login');
+        } else {
+            setStatus('❌ ' + data.message, 'error');
+            logLine('❌ ' + data.message);
+            alert('❌ ' + data.message);
+        }
+
+    } catch (e) {
+        setStatus('❌ Erro ao solicitar reset: ' + e.message, 'error');
+        logLine('❌ Erro: ' + e.message);
+        alert('❌ Erro ao solicitar reset:\n\n' + e.message);
+    }
+};
+
+// Confirm password reset (when URL has reset_token)
+window.confirmPasswordReset = async function() {
+    const newPassword = document.getElementById('new_password').value;
+    const newPasswordConfirm = document.getElementById('new_password_confirm').value;
+
+    if (!newPassword) {
+        alert('⚠️ Preencha a nova password');
+        return;
+    }
+
+    if (newPassword.length < 3) {
+        alert('⚠️ Password deve ter pelo menos 3 caracteres');
+        return;
+    }
+
+    if (newPassword !== newPasswordConfirm) {
+        alert('⚠️ As passwords não coincidem');
+        return;
+    }
+
+    // Get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('reset_token');
+
+    if (!resetToken) {
+        alert('❌ Token de reset não encontrado no URL');
+        return;
+    }
+
+    setStatus('🔐 A alterar password...', 'info');
+    logLine('A confirmar reset de password...');
+
+    try {
+        const response = await fetch('/auth/password-reset/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: resetToken,
+                new_password: newPassword
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            logLine('✅ ' + data.message);
+
+            // Clear form
+            document.getElementById('new_password').value = '';
+            document.getElementById('new_password_confirm').value = '';
+
+            alert('✅ ' + data.message);
+
+            // Remove token from URL and reload
+            window.location.href = window.location.pathname;
+
+        } else {
+            setStatus('❌ ' + data.message, 'error');
+            logLine('❌ ' + data.message);
+            alert('❌ ' + data.message);
+        }
+
+    } catch (e) {
+        setStatus('❌ Erro ao alterar password: ' + e.message, 'error');
+        logLine('❌ Erro: ' + e.message);
+        alert('❌ Erro ao alterar password:\n\n' + e.message);
+    }
+};
+
+// Check if URL has reset_token on page load
+window.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('reset_token');
+
+    if (resetToken) {
+        console.log('[PASSWORD-RESET] Reset token detected in URL');
+        logLine('🔐 Link de recuperação de password detectado');
+
+        // Validate token first
+        fetch('/auth/check-reset-token?token=' + encodeURIComponent(resetToken))
+            .then(response => response.json())
+            .then(data => {
+                if (data.valid) {
+                    console.log('[PASSWORD-RESET] Token is valid for user:', data.username);
+                    logLine('✅ Link válido. Username: ' + data.username);
+
+                    // Hide all auth forms
+                    document.getElementById('login-form').style.display = 'none';
+                    document.getElementById('register-form').style.display = 'none';
+                    document.getElementById('password-reset-form').style.display = 'none';
+
+                    // Show new password form
+                    document.getElementById('new-password-form').style.display = 'block';
+
+                    // Show login overlay
+                    document.getElementById('login-overlay').style.display = 'flex';
+
+                    setStatus('🔐 Crie uma nova password', 'info');
+                } else {
+                    console.log('[PASSWORD-RESET] Token is invalid:', data.reason);
+                    logLine('❌ Link inválido: ' + data.reason);
+                    alert('❌ Link de recuperação inválido ou expirado.\n\nSolicite um novo link.');
+
+                    // Remove token from URL
+                    window.location.href = window.location.pathname;
+                }
+            })
+            .catch(error => {
+                console.error('[PASSWORD-RESET] Error validating token:', error);
+                logLine('❌ Erro ao validar link de recuperação');
+                alert('❌ Erro ao validar link de recuperação');
+            });
+    }
+});
+
 window.loginDev = async function() {
     try {
         document.getElementById('login_user').value = 'dev';
@@ -1456,6 +1631,94 @@ window.loginDev = async function() {
         logLine('Login dev/dev error: ' + (e && e.message ? e.message : e));
         setStatus('❌ Erro login dev/dev: ' + (e && e.message ? e.message : e), 'error');
     }
+};
+
+// ============================================================================
+// HELP WIDGET FUNCTIONS
+// ============================================================================
+
+/**
+ * Toggle help widget panel visibility
+ */
+window.toggleHelpWidget = function() {
+    const panel = document.getElementById('help-widget-panel');
+    if (panel) {
+        panel.classList.toggle('open');
+
+        // Clear search when closing
+        if (!panel.classList.contains('open')) {
+            const searchInput = document.getElementById('help-search');
+            if (searchInput) {
+                searchInput.value = '';
+                filterHelpItems();
+            }
+        }
+    }
+};
+
+/**
+ * Toggle individual help item (expand/collapse)
+ */
+window.toggleHelpItem = function(element) {
+    element.classList.toggle('expanded');
+};
+
+/**
+ * Filter help items based on search input
+ */
+window.filterHelpItems = function() {
+    const searchInput = document.getElementById('help-search');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const helpItems = document.querySelectorAll('.help-item');
+    const helpSections = document.querySelectorAll('.help-section');
+
+    if (!searchTerm) {
+        // Show all items and sections
+        helpItems.forEach(item => {
+            item.style.display = 'block';
+            item.classList.remove('expanded');
+        });
+        helpSections.forEach(section => {
+            section.style.display = 'block';
+        });
+        return;
+    }
+
+    // Track which sections have visible items
+    const sectionsWithResults = new Set();
+
+    helpItems.forEach(item => {
+        const question = item.querySelector('.help-item-question');
+        const answer = item.querySelector('.help-item-answer');
+
+        if (!question || !answer) return;
+
+        const questionText = question.textContent.toLowerCase();
+        const answerText = answer.textContent.toLowerCase();
+
+        if (questionText.includes(searchTerm) || answerText.includes(searchTerm)) {
+            item.style.display = 'block';
+            item.classList.add('expanded'); // Auto-expand matching items
+
+            // Mark parent section as having results
+            const parentSection = item.closest('.help-section');
+            if (parentSection) {
+                sectionsWithResults.add(parentSection);
+            }
+        } else {
+            item.style.display = 'none';
+            item.classList.remove('expanded');
+        }
+    });
+
+    // Show/hide sections based on whether they have visible items
+    helpSections.forEach(section => {
+        if (sectionsWithResults.has(section)) {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
 };
 
 window.onFileChange = function(ev) {

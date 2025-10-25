@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
+from typing import Optional
 from jose import jwt, JWTError
 
 from core.logging_config import setup_logging, get_logger
@@ -65,6 +66,7 @@ async def startup_cleanup():
 class RegisterIn(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    email: Optional[str] = None  # Optional email for password reset
 
 
 def country_from_request(request: Request) -> str:
@@ -268,7 +270,7 @@ async def diagnostics(request: Request, db=Depends(get_db)):
     - Java availability and JAR presence
     - B2 (S3) client configuration and basic connectivity
     """
-    import time, tempfile, asyncio, os, os.path, socket
+    import time, tempfile, asyncio, os, os.path, socket, sys, platform, shutil
     from core.storage import Storage
 
     now = time.time()
@@ -283,6 +285,14 @@ async def diagnostics(request: Request, db=Depends(get_db)):
         'secret_key_set': (SECRET_KEY != 'change_me'),
         'secret_key_len': len(SECRET_KEY) if isinstance(SECRET_KEY, str) else None,
         'secret_key_default': (SECRET_KEY == 'change_me'),
+        'app_port': os.getenv('APP_PORT'),
+        'default_country': os.getenv('DEFAULT_COUNTRY','pt'),
+        'cors_origins': os.getenv('CORS_ORIGINS','*'),
+        'upload_chunk_size': int(os.getenv('UPLOAD_CHUNK_SIZE', str(5*1024*1024))),
+        'factemiclI_timeout': int(os.getenv('FACTEMICLI_TIMEOUT','300')),
+        'python': sys.version,
+        'platform': platform.platform(),
+        'cpu_count': os.cpu_count(),
     }
 
     # DB
@@ -306,7 +316,8 @@ async def diagnostics(request: Request, db=Depends(get_db)):
         with open(test_path, 'w', encoding='utf-8') as f:
             f.write('ok')
         os.remove(test_path)
-        upload_info.update({ 'ok': True, 'writable': True })
+        total, used, free = shutil.disk_usage(upload_root)
+        upload_info.update({ 'ok': True, 'writable': True, 'disk': { 'total': total, 'used': used, 'free': free } })
     except Exception as e:
         upload_info.update({ 'ok': False, 'writable': False, 'error': str(e) })
 
@@ -352,24 +363,49 @@ async def diagnostics(request: Request, db=Depends(get_db)):
     }
     try:
         storage = Storage()
-        # Light-touch call: list_buckets may require permission; wrap in try
-        def _try_list():
+        # Try head_bucket first (requires permission), else report error
+        def _try_checks():
             try:
-                storage.client.list_buckets()
+                storage.client.head_bucket(Bucket=storage.bucket)
+                # Optionally try a very light list (may still fail on perms)
+                try:
+                    storage.client.list_objects_v2(Bucket=storage.bucket, MaxKeys=1)
+                except Exception:
+                    pass
                 return True, None
             except Exception as ex:
                 return False, str(ex)
-        ok, err = await asyncio.to_thread(_try_list)
+        ok, err = await asyncio.to_thread(_try_checks)
         b2_info['ok'] = ok
         if not ok:
             b2_info['error'] = err
     except Exception as e:
         b2_info.update({ 'ok': False, 'error': str(e) })
 
+    # Mongo socket connectivity (best-effort)
+    mongo_sock = { 'ok': False }
+    try:
+        uri = os.getenv('MONGO_URI') or 'mongodb://mongo:27017'
+        from urllib.parse import urlparse
+        p = urlparse(uri)
+        host = p.hostname or 'mongo'
+        port = p.port or 27017
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3.0)
+        try:
+            sock.connect((host, port))
+            mongo_sock.update({ 'ok': True, 'host': host, 'port': port })
+        finally:
+            try: sock.close()
+            except Exception: pass
+    except Exception as e:
+        mongo_sock.update({ 'ok': False, 'error': str(e) })
+
     return {
         'ok': (env_info['secret_key_set'] and db_info.get('ok') and upload_info.get('ok')),
         'env': env_info,
         'db': db_info,
+        'db_socket': mongo_sock,
         'upload': upload_info,
         'java': java_info,
         'jar': jar_info,
@@ -396,7 +432,7 @@ async def register(user: RegisterIn, request: Request, db=Depends(get_db)):
         logger.error("Password hashing failed", extra={'error': str(e)})
         raise HTTPException(status_code=500, detail=f"Server crypto error while hashing password: {e.__class__.__name__}")
     try:
-        created = await repo.create(user.username, pwd_hash)
+        created = await repo.create(user.username, pwd_hash, user.email)
         return { 'id': str(created['_id']), 'username': created['username'], 'country': country }
     except Exception as e:
         logger.error("Registration failed at create", extra={'error': str(e)})
@@ -443,6 +479,174 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
 @app.get('/auth/me', tags=['Authentication'])
 async def auth_me(current=Depends(get_current_user)):
     return current
+
+
+# Password Reset Endpoints
+from core.models import PasswordResetRequestIn, PasswordResetRequestOut, PasswordResetConfirmIn, PasswordResetConfirmOut
+from core.password_reset_repo import PasswordResetRepo
+from core.email_service import get_email_service
+
+@app.post('/auth/password-reset/request', tags=['Authentication'], response_model=PasswordResetRequestOut)
+async def request_password_reset(data: PasswordResetRequestIn, request: Request, db=Depends(get_db)):
+    """
+    Request password reset - sends email with reset token
+
+    Security: Always returns success even if username doesn't exist (prevents user enumeration)
+    """
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+    email_service = get_email_service()
+
+    try:
+        # Get user
+        user = await repo.get(data.username)
+
+        if not user:
+            # Security: Don't reveal if username exists
+            logger.info(f"Password reset requested for non-existent user: {data.username}")
+            return PasswordResetRequestOut(
+                ok=True,
+                message="Se o username existir e tiver email configurado, receberá um email com instruções."
+            )
+
+        # Check if user has email
+        user_email = user.get('email')
+        if not user_email:
+            logger.warning(f"User {data.username} has no email configured")
+            return PasswordResetRequestOut(
+                ok=False,
+                message="Este utilizador não tem email configurado. Contacte o suporte técnico."
+            )
+
+        # Generate reset token
+        reset_token = await reset_repo.create_reset_token(data.username, user_email)
+
+        # Send email
+        if email_service.is_configured():
+            email_sent = email_service.send_password_reset_email(
+                to_email=user_email,
+                username=data.username,
+                reset_token=reset_token
+            )
+
+            if email_sent:
+                logger.info(f"✅ Password reset email sent to {user_email} for user {data.username}")
+                return PasswordResetRequestOut(
+                    ok=True,
+                    message=f"Email enviado para {user_email}. Verifique a sua caixa de entrada e spam."
+                )
+            else:
+                logger.error(f"❌ Failed to send password reset email to {user_email}")
+                return PasswordResetRequestOut(
+                    ok=False,
+                    message="Erro ao enviar email. Contacte o suporte técnico."
+                )
+        else:
+            logger.error("❌ SMTP not configured. Cannot send password reset email.")
+            return PasswordResetRequestOut(
+                ok=False,
+                message="Serviço de email não configurado. Contacte o administrador do sistema."
+            )
+
+    except Exception as e:
+        logger.error(f"Error in password reset request: {e}", exc_info=True)
+        return PasswordResetRequestOut(
+            ok=False,
+            message="Erro ao processar pedido. Tente novamente mais tarde."
+        )
+
+
+@app.post('/auth/password-reset/confirm', tags=['Authentication'], response_model=PasswordResetConfirmOut)
+async def confirm_password_reset(data: PasswordResetConfirmIn, request: Request, db=Depends(get_db)):
+    """
+    Confirm password reset with token and set new password
+    """
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+    email_service = get_email_service()
+
+    try:
+        # Validate token
+        token_doc = await reset_repo.validate_token(data.token)
+
+        if not token_doc:
+            logger.warning(f"Invalid or expired password reset token")
+            return PasswordResetConfirmOut(
+                ok=False,
+                message="Link de recuperação inválido ou expirado. Solicite um novo link."
+            )
+
+        username = token_doc['username']
+        user_email = token_doc['email']
+
+        # Validate new password
+        if len(data.new_password) < 3:
+            return PasswordResetConfirmOut(
+                ok=False,
+                message="Password deve ter pelo menos 3 caracteres."
+            )
+
+        # Hash new password
+        from core.security import hash_password
+        new_hash = hash_password(data.new_password)
+
+        # Update password in database
+        await repo.update_password(username, new_hash)
+
+        # Mark token as used
+        await reset_repo.mark_token_used(data.token)
+
+        logger.info(f"✅ Password reset successful for user {username}")
+
+        # Send confirmation email
+        if email_service.is_configured():
+            email_service.send_password_changed_notification(user_email, username)
+
+        return PasswordResetConfirmOut(
+            ok=True,
+            message="Password alterada com sucesso! Já pode fazer login com a nova password."
+        )
+
+    except Exception as e:
+        logger.error(f"Error in password reset confirm: {e}", exc_info=True)
+        return PasswordResetConfirmOut(
+            ok=False,
+            message="Erro ao alterar password. Tente novamente."
+        )
+
+
+@app.get('/auth/check-reset-token', tags=['Authentication'])
+async def check_reset_token(token: str, db=Depends(get_db)):
+    """
+    Check if a password reset token is valid (for frontend validation)
+    """
+    reset_repo = PasswordResetRepo(db)
+
+    try:
+        token_doc = await reset_repo.validate_token(token)
+
+        if token_doc:
+            return {
+                'ok': True,
+                'valid': True,
+                'username': token_doc['username']
+            }
+        else:
+            return {
+                'ok': True,
+                'valid': False,
+                'reason': 'Token inválido ou expirado'
+            }
+
+    except Exception as e:
+        logger.error(f"Error checking reset token: {e}")
+        return {
+            'ok': False,
+            'valid': False,
+            'reason': 'Erro ao validar token'
+        }
 
 
 # PT router
@@ -515,6 +719,7 @@ except Exception:
 class RegisterIn(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    email: Optional[str] = None  # Optional email for password reset
 
 
 def country_from_request(request: Request) -> str:
@@ -1075,7 +1280,7 @@ async def register(user: RegisterIn, request: Request, db=Depends(get_db)):
         logger.error("Password hashing failed", extra={'error': str(e)})
         raise HTTPException(status_code=500, detail=f"Server crypto error while hashing password: {e.__class__.__name__}")
     try:
-        created = await repo.create(user.username, pwd_hash)
+        created = await repo.create(user.username, pwd_hash, user.email)
         return { 'id': str(created['_id']), 'username': created['username'], 'country': country }
     except Exception as e:
         logger.error("Registration failed at create", extra={'error': str(e)})
