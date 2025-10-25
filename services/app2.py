@@ -443,6 +443,84 @@ async def delete_smtp_config(current=Depends(require_sysadmin), db=Depends(get_d
         raise HTTPException(status_code=500, detail='Erro ao eliminar configuração SMTP')
 
 
+# Password Reset Endpoints
+from core.models import PasswordResetRequestIn, PasswordResetRequestOut, PasswordResetConfirmIn, PasswordResetConfirmOut
+from core.password_reset_repo import PasswordResetRepo
+from core.email_service import get_email_service
+
+@app.post('/auth/password-reset/request', tags=['Authentication'], response_model=PasswordResetRequestOut)
+async def request_password_reset(data: PasswordResetRequestIn, request: Request, db=Depends(get_db)):
+    """Request password reset - sends email with reset token"""
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+    email_service = get_email_service()
+
+    try:
+        user = await repo.get(data.username)
+        if not user:
+            return PasswordResetRequestOut(ok=True, message="Se o username existir e tiver email configurado, receberá um email com instruções.")
+
+        user_email = user.get('email')
+        if not user_email:
+            return PasswordResetRequestOut(ok=False, message="Este utilizador não tem email configurado. Por favor, faça login e adicione um email no seu Perfil (botão ⚙️ Perfil na barra superior).")
+
+        reset_token = await reset_repo.create_reset_token(data.username, user_email)
+
+        if email_service.is_configured():
+            email_sent = email_service.send_password_reset_email(to_email=user_email, username=data.username, reset_token=reset_token)
+            if email_sent:
+                logger.info(f"✅ Password reset email sent to {user_email}")
+                return PasswordResetRequestOut(ok=True, message=f"Email enviado para {user_email}. Verifique a sua caixa de entrada e spam.")
+            else:
+                return PasswordResetRequestOut(ok=False, message="Erro ao enviar email. Contacte o suporte técnico.")
+        else:
+            return PasswordResetRequestOut(ok=False, message="Serviço de email não configurado. Contacte o administrador do sistema.")
+    except Exception as e:
+        logger.error(f"Error in password reset: {e}", exc_info=True)
+        return PasswordResetRequestOut(ok=False, message="Erro ao processar pedido.")
+
+
+@app.post('/auth/password-reset/confirm', tags=['Authentication'], response_model=PasswordResetConfirmOut)
+async def confirm_password_reset(data: PasswordResetConfirmIn, request: Request, db=Depends(get_db)):
+    """Confirm password reset with token and set new password"""
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+
+    try:
+        token_doc = await reset_repo.validate_token(data.token)
+        if not token_doc:
+            return PasswordResetConfirmOut(ok=False, message="Link de recuperação inválido ou expirado.")
+
+        if len(data.new_password) < 3:
+            return PasswordResetConfirmOut(ok=False, message="Password deve ter pelo menos 3 caracteres.")
+
+        new_hash = hash_password(data.new_password)
+        await repo.update_password(token_doc['username'], new_hash)
+        await reset_repo.mark_token_used(data.token)
+
+        logger.info(f"✅ Password reset successful for {token_doc['username']}")
+        return PasswordResetConfirmOut(ok=True, message="Password alterada com sucesso!")
+    except Exception as e:
+        logger.error(f"Error in password reset confirm: {e}", exc_info=True)
+        return PasswordResetConfirmOut(ok=False, message="Erro ao alterar password.")
+
+
+@app.get('/auth/check-reset-token', tags=['Authentication'])
+async def check_reset_token(token: str, db=Depends(get_db)):
+    """Check if password reset token is valid"""
+    try:
+        token_doc = await PasswordResetRepo(db).validate_token(token)
+        if token_doc:
+            return {'ok': True, 'valid': True, 'username': token_doc['username']}
+        else:
+            return {'ok': True, 'valid': False, 'reason': 'Token inválido ou expirado'}
+    except Exception as e:
+        logger.error(f"Error checking token: {e}")
+        return {'ok': False, 'valid': False, 'reason': 'Erro ao validar token'}
+
+
 from saft_pt_doctor.routers_pt import router as router_pt
 app.include_router(router_pt, prefix='/pt')
 
