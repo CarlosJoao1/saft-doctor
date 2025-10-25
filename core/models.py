@@ -4,6 +4,22 @@ from typing import Optional, Dict, List
 class ATSecretIn(BaseModel): username:str; password:str
 class ATSecretOut(BaseModel): ok: bool
 
+# Password Reset Models
+class PasswordResetRequestIn(BaseModel):
+	username: str
+
+class PasswordResetRequestOut(BaseModel):
+	ok: bool
+	message: str
+
+class PasswordResetConfirmIn(BaseModel):
+	token: str
+	new_password: str
+
+class PasswordResetConfirmOut(BaseModel):
+	ok: bool
+	message: str
+
 class ATEntryIn(BaseModel):
 	ident: str  # e.g., NIF
 	password: str
