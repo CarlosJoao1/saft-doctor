@@ -5,6 +5,105 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [Release 21] - 2025-10-25
+
+### Adicionado
+- 🔐 **Sistema completo de recuperação de password**
+  - Endpoint `POST /auth/password-reset/request` para solicitar reset de password
+  - Endpoint `POST /auth/password-reset/confirm` para confirmar e criar nova password
+  - Endpoint `GET /auth/check-reset-token` para validar tokens de reset
+  - Integração com ServerSMTP.com para envio de emails
+  - Templates HTML profissionais para emails de recuperação
+  - Tokens SHA-256 com expiração de 1 hora e uso único
+  - Campo email opcional no registo de utilizadores
+  - Link "Esqueceu a password?" no formulário de login
+  - Formulário de reset de password com deteção automática de token no URL
+  - Confirmação por email após alteração bem-sucedida
+
+- 💬 **Widget de ajuda interativo (Bot Fase 1)**
+  - Botão flutuante de ajuda no canto inferior direito
+  - Centro de ajuda com FAQ abrangente organizado por secções:
+    * 🔐 Autenticação (login, registo, recuperação de password)
+    * 📄 Validação de ficheiros SAFT
+    * 🔑 Gestão de credenciais AT
+    * 🚀 Processo de submissão
+    * 📊 Histórico de validações
+    * 📑 Visualização de documentos
+    * ⚠️ Resolução de problemas comuns
+  - Sistema de pesquisa/filtro de conteúdos de ajuda
+  - Items expandíveis/colapsáveis estilo acordeão
+  - Design responsivo para mobile
+  - Zero dependências externas
+  - Link para suporte técnico por email
+
+- 📧 **Serviço de email (sysadmin-only)**
+  - Módulo `core/email_service.py` para envio de emails via SMTP
+  - Configuração centralizada via variáveis de ambiente (sysadmin)
+  - Suporte para ServerSMTP.com com TLS
+  - Templates HTML responsivos e profissionais
+  - Fallback para texto plano quando HTML não disponível
+
+- 📚 **Documentação técnica**
+  - Documento `docs/SISTEMA-PASSWORD-RESET-E-BOT.md` (1.247 linhas)
+  - Diagramas de fluxo ASCII do processo de reset
+  - Análise de 4 opções de bot/chatbot com custos
+  - Guia de configuração SMTP para sysadmin
+  - Considerações de segurança e melhores práticas
+
+### Melhorado
+- 🚀 **Cache-busting**
+  - Atualizado de v=43 para v=44
+  - Garante carregamento da versão mais recente do JavaScript
+
+- 🔐 **Segurança de passwords**
+  - Tokens nunca armazenados em texto plano (SHA-256)
+  - Tokens de uso único marcados como usados após reset
+  - Não revela se username existe (proteção contra enumeração)
+  - Validação de expiração de tokens (1 hora)
+
+- 🎨 **UI/UX**
+  - Formulário de password reset integrado no overlay de login
+  - Deteção automática de token de reset no URL
+  - Feedback visual claro em todos os passos do processo
+  - Widget de ajuda sempre acessível mas não intrusivo
+
+- 📊 **Diagnósticos do sistema**
+  - Melhorado endpoint `/diagnostics` com mais informações:
+    * Versão Python e plataforma
+    * Contagem de CPUs
+    * Espaço em disco (total/usado/livre)
+    * Socket MongoDB connectivity check
+    * Verificações mais robustas do B2 (head_bucket)
+
+### Técnico
+- **Novos módulos** (criados em sessão anterior):
+  - `core/email_service.py` - Serviço de envio de emails
+  - `core/password_reset_repo.py` - Gestão de tokens de reset
+  - `docs/SISTEMA-PASSWORD-RESET-E-BOT.md` - Documentação completa
+
+- **Ficheiros modificados**:
+  - `services/main.py` - Endpoints password reset, diagnostics melhorado
+  - `core/models.py` - Modelos PasswordReset* (sessão anterior)
+  - `core/auth_repo.py` - Métodos update_password(), update_email() (sessão anterior)
+  - `static/app.js` - Funções password reset, help widget
+  - `ui.html` - Formulários reset, help widget HTML/CSS, cache-buster v=44
+
+- **Commits principais**:
+  - `1028b69` - Feature: Add password reset system and help widget (Release 21)
+
+- **Variáveis de ambiente** (sysadmin):
+  ```env
+  # SMTP Configuration (System-wide)
+  SMTP_HOST=mail.serversmtp.com
+  SMTP_PORT=587
+  SMTP_USER=your-smtp-username
+  SMTP_PASSWORD=your-smtp-password
+  SMTP_FROM_EMAIL=noreply@saft.aquinos.io
+  APP_URL=https://saft.aquinos.io
+  ```
+
+- **Documentação**: Ver [docs/SISTEMA-PASSWORD-RESET-E-BOT.md](docs/SISTEMA-PASSWORD-RESET-E-BOT.md) para detalhes completos
+
 ## [Release 20] - 2025-10-23
 
 ### Adicionado
