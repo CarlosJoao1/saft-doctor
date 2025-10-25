@@ -690,15 +690,18 @@ window.showIssuesPopup = function(issues) {
 window.updateNavbar = function() {
     const usernameEl = document.getElementById('navbar-username');
     const logoutBtn = document.getElementById('btn-logout');
+    const profileBtn = document.getElementById('btn-profile');
     const overlay = document.getElementById('login-overlay');
-    
+
     if (window.state.token) {
         if (usernameEl) usernameEl.textContent = window.state.username || 'Utilizador';
         if (logoutBtn) logoutBtn.style.display = 'block';
+        if (profileBtn) profileBtn.style.display = 'block';
         if (overlay) overlay.classList.add('hidden');
     } else {
         if (usernameEl) usernameEl.textContent = 'Não autenticado';
         if (logoutBtn) logoutBtn.style.display = 'none';
+        if (profileBtn) profileBtn.style.display = 'none';
         if (overlay) overlay.classList.remove('hidden');
     }
 };
@@ -1719,6 +1722,99 @@ window.filterHelpItems = function() {
             section.style.display = 'none';
         }
     });
+};
+
+// ============================================================================
+// USER PROFILE FUNCTIONS
+// ============================================================================
+
+/**
+ * Show profile modal and load current user data
+ */
+window.showProfileModal = async function() {
+    const overlay = document.getElementById('profile-overlay');
+    if (!overlay) return;
+
+    // Show modal
+    overlay.style.display = 'flex';
+
+    // Load profile data
+    try {
+        const response = await fetch('/auth/profile', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + state.token
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao carregar perfil');
+        }
+
+        const data = await response.json();
+
+        // Fill form
+        document.getElementById('profile-username').value = data.username || '';
+        document.getElementById('profile-email').value = data.email || '';
+
+        logLine('📋 Perfil carregado: ' + data.username);
+    } catch (e) {
+        console.error('Error loading profile:', e);
+        alert('❌ Erro ao carregar perfil:\n\n' + e.message);
+    }
+};
+
+/**
+ * Close profile modal
+ */
+window.closeProfileModal = function() {
+    const overlay = document.getElementById('profile-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+};
+
+/**
+ * Update user email
+ */
+window.updateProfileEmail = async function() {
+    const email = document.getElementById('profile-email').value.trim();
+
+    // Validate email
+    if (email && !email.includes('@')) {
+        alert('⚠️ Email inválido. Deve conter @');
+        return;
+    }
+
+    setStatus('💾 A guardar email...', 'info');
+    logLine('Atualizando email: ' + email);
+
+    try {
+        const response = await fetch('/auth/profile/email?email=' + encodeURIComponent(email), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + state.token
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ Email atualizado com sucesso');
+            closeProfileModal();
+        } else {
+            const errorMsg = data.detail || data.message || 'Erro desconhecido';
+            setStatus('❌ ' + errorMsg, 'error');
+            alert('❌ ' + errorMsg);
+            logLine('❌ Erro ao atualizar email: ' + errorMsg);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao atualizar email: ' + e.message, 'error');
+        alert('❌ Erro ao atualizar email:\n\n' + e.message);
+        logLine('❌ Erro: ' + e.message);
+    }
 };
 
 window.onFileChange = function(ev) {

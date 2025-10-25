@@ -481,6 +481,63 @@ async def auth_me(current=Depends(get_current_user)):
     return current
 
 
+@app.get('/auth/profile', tags=['Authentication'])
+async def get_profile(current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Get current user's profile including email
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        user = await repo.get(username)
+        if not user:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        return {
+            'username': user['username'],
+            'email': user.get('email'),
+            'country': country
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Error getting profile')
+
+
+@app.post('/auth/profile/email', tags=['Authentication'])
+async def update_profile_email(email: str, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Update current user's email address
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        # Validate email format (basic validation)
+        if email and '@' not in email:
+            raise HTTPException(status_code=400, detail='Email inválido')
+
+        # Update email
+        await repo.update_email(username, email)
+
+        logger.info(f"✅ Email updated for user {username}")
+
+        return {
+            'ok': True,
+            'message': 'Email atualizado com sucesso',
+            'email': email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating email: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao atualizar email')
+
+
 # Password Reset Endpoints
 from core.models import PasswordResetRequestIn, PasswordResetRequestOut, PasswordResetConfirmIn, PasswordResetConfirmOut
 from core.password_reset_repo import PasswordResetRepo

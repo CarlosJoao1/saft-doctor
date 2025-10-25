@@ -502,7 +502,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=44"></script>
+    <script src="/static/app.js?v=45"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -515,6 +515,9 @@
                 <span>👤</span>
                 <span id="navbar-username">Não autenticado</span>
             </div>
+            <button class="btn-logout" onclick="showProfileModal()" id="btn-profile" style="display: none; margin-right: 0.5rem;">
+                ⚙️ Perfil
+            </button>
             <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
                 Sair
             </button>
@@ -1075,6 +1078,31 @@
 
     <div class="status-bar">
         <div class="status-text" id="status">Pronto para validar ficheiros SAFT-T</div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="login-overlay" id="profile-overlay" style="display: none;">
+        <div class="login-card" style="max-width: 500px;">
+            <h2 style="margin-bottom: 1.5rem;">⚙️ Perfil de Utilizador</h2>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-username">Username</label>
+                <input type="text" id="profile-username" disabled style="background: var(--bg); cursor: not-allowed;" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-email">Email</label>
+                <input type="email" id="profile-email" placeholder="seu@email.com" />
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    Necessário para recuperação de password
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1.5rem;">
+                <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
+                <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
+            </div>
+        </div>
     </div>
 
     <!-- Help Widget -->
