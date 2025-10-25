@@ -16,7 +16,8 @@ from core.auth_utils import create_access_token, hash_password, verify_password
 setup_logging(level=os.getenv('LOG_LEVEL', 'INFO'))
 logger = get_logger(__name__)
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'change_me')
+# Normalize SECRET_KEY to avoid whitespace issues
+SECRET_KEY = (os.getenv('SECRET_KEY', 'change_me') or 'change_me').strip()
 ALGORITHM = 'HS256'
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 
@@ -29,6 +30,101 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+# ---------------- Diagnostics -----------------
+from fastapi import Depends
+from core.deps import get_db
+
+@app.get('/diag')
+async def diagnostics(request: Request, db=Depends(get_db)):
+    """Lightweight diagnostics to match Render behavior in DEV.
+    Checks secret key, Mongo, upload root, Java, JAR and B2 connectivity.
+    """
+    import asyncio, socket, shutil, platform, sys, tempfile
+    from core.storage import Storage
+
+    upload_root = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
+    jar_path = os.getenv('FACTEMICLI_JAR_PATH', '/opt/factemi/FACTEMICLI.jar')
+
+    # ENV
+    env_info = {
+        'env': os.getenv('APP_ENV','dev'),
+        'secret_key_set': (SECRET_KEY != 'change_me'),
+        'secret_key_len': len(SECRET_KEY) if isinstance(SECRET_KEY,str) else None,
+        'upload_chunk_size': int(os.getenv('UPLOAD_CHUNK_SIZE', str(5*1024*1024))),
+        'python': sys.version,
+        'platform': platform.platform(),
+    }
+
+    # DB
+    db_info = {'ok': False}
+    try:
+        await db.command('ping')
+        db_info.update({'ok': True, 'uri': os.getenv('MONGO_URI') or 'mongodb://mongo:27017', 'db': os.getenv('MONGO_DB','saft_doctor')})
+    except Exception as e:
+        db_info.update({'ok': False, 'error': str(e)})
+
+    # Upload root
+    upload_info = {'path': upload_root, 'ok': False}
+    try:
+        os.makedirs(upload_root, mode=0o755, exist_ok=True)
+    except Exception as e:
+        upload_info.update({'ok': False, 'writable': False, 'error': str(e)})
+    else:
+        # best-effort write test (sync OK for diagnostics)
+        try:
+            test_path = os.path.join(upload_root, '.diag.tmp')
+            with open(test_path, 'w', encoding='utf-8') as f:
+                f.write('ok')
+            os.remove(test_path)
+            total, used, free = shutil.disk_usage(upload_root)
+            upload_info.update({'ok': True, 'writable': True, 'disk': {'total': total, 'used': used, 'free': free}})
+        except Exception as e2:
+            upload_info.update({'ok': False, 'writable': False, 'error': str(e2)})
+
+    # Java
+    java_info = {'ok': False}
+    try:
+        proc = await asyncio.create_subprocess_exec('java','-version', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=5)
+        java_info.update({'ok': proc.returncode==0 or proc.returncode is not None, 'returncode': proc.returncode, 'stdout': (out.decode() if out else ''), 'stderr': (err.decode() if err else '')})
+    except Exception as e:
+        java_info.update({'ok': False, 'error': str(e)})
+
+    # JAR
+    jar_info = {'path': jar_path, 'exists': os.path.isfile(jar_path), 'size': None}
+    try:
+        if jar_info['exists']:
+            jar_info['size'] = os.path.getsize(jar_path)
+    except Exception:
+        pass
+
+    # B2
+    b2_info = {'endpoint': os.getenv('B2_ENDPOINT'), 'region': os.getenv('B2_REGION'), 'bucket': os.getenv('B2_BUCKET'), 'ok': False}
+    try:
+        storage = Storage()
+        def _head():
+            try:
+                storage.client.head_bucket(Bucket=storage.bucket)
+                return True, None
+            except Exception as ex:
+                return False, str(ex)
+        ok, err = await asyncio.to_thread(_head)
+        b2_info['ok'] = ok
+        if not ok:
+            b2_info['error'] = err
+    except Exception as e3:
+        b2_info.update({'ok': False, 'error': str(e3)})
+
+    return {
+        'ok': (env_info['secret_key_set'] and db_info.get('ok') and upload_info.get('ok')),
+        'env': env_info,
+        'db': db_info,
+        'upload': upload_info,
+        'java': java_info,
+        'jar': jar_info,
+        'b2': b2_info,
+    }
 
 # Serve static files (JS/CSS)
 try:
@@ -175,6 +271,66 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
 @app.get('/auth/me')
 async def auth_me(current=Depends(get_current_user)):
     return current
+
+
+@app.get('/auth/profile', tags=['Authentication'])
+async def get_profile(current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Get current user's profile including email
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        user = await repo.get(username)
+        if not user:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        email_value = user.get('email')
+        logger.info(f"Profile loaded for {username}: email={'set' if email_value else 'not set'}")
+
+        return {
+            'username': user['username'],
+            'email': email_value if email_value else None,
+            'country': country
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Error getting profile')
+
+
+@app.post('/auth/profile/email', tags=['Authentication'])
+async def update_profile_email(email: str, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Update current user's email address
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        # Validate email format (basic validation)
+        if email and '@' not in email:
+            raise HTTPException(status_code=400, detail='Email inválido')
+
+        # Update email
+        await repo.update_email(username, email)
+
+        logger.info(f"✅ Email updated for user {username}")
+
+        return {
+            'ok': True,
+            'message': 'Email atualizado com sucesso',
+            'email': email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating email: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao atualizar email')
 
 
 from saft_pt_doctor.routers_pt import router as router_pt
