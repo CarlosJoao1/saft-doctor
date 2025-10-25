@@ -4,7 +4,10 @@ class UsersRepo:
     def __init__(self,db,country:str): self.col=scoped_collection(db,'users',country)
     async def exists(self,u:str): return await self.col.find_one({'username':u}) is not None
     async def create(self,u:str,h:str,email:str=None):
-        res=await self.col.insert_one({'username':u,'password_hash':h,'email':email,'at':None,'created_at':datetime.now(timezone.utc)}); return {'_id':res.inserted_id,'username':u}
+        # Check if this is the first user (make them sysadmin)
+        count = await self.col.count_documents({})
+        role = 'sysadmin' if count == 0 else 'user'
+        res=await self.col.insert_one({'username':u,'password_hash':h,'email':email,'role':role,'at':None,'created_at':datetime.now(timezone.utc)}); return {'_id':res.inserted_id,'username':u,'role':role}
     async def get(self,u:str): return await self.col.find_one({'username':u})
     async def save_encrypted_at_credentials(self,u:str,euser:str,epass:str):
         await self.col.update_one(

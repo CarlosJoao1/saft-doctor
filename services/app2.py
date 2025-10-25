@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
+from typing import Optional
 from jose import jwt, JWTError
 
 from core.logging_config import setup_logging, get_logger
@@ -140,6 +141,7 @@ except Exception as e:
 class RegisterIn(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    email: Optional[str] = None  # Optional email for password reset
 
 
 def country_from_request(request: Request) -> str:
@@ -238,7 +240,9 @@ async def register(user: RegisterIn, request: Request, db=Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=503, detail='Database unavailable (exists check).')
-    created = await repo.create(user.username, hash_password(user.password))
+    pwd_hash = hash_password(user.password)
+    created = await repo.create(user.username, pwd_hash, user.email)
+    logger.info(f"✅ User registered: {user.username}, email: {'set' if user.email else 'not set'}")
     return { 'id': str(created['_id']), 'username': created['username'], 'country': country }
 
 
@@ -265,7 +269,7 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
     u = await UsersRepo(db, country).get(username)
     if not u:
         raise HTTPException(status_code=401, detail='User not found')
-    return { 'username': username, 'country': country }
+    return { 'username': username, 'country': country, 'role': u.get('role', 'user') }
 
 
 @app.get('/auth/me')
@@ -331,6 +335,112 @@ async def update_profile_email(email: str, current=Depends(get_current_user), db
     except Exception as e:
         logger.error(f"Error updating email: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail='Erro ao atualizar email')
+
+
+# SMTP Configuration Endpoints (Sysadmin only)
+from core.smtp_config_repo import SMTPConfigRepo
+
+def require_sysadmin(current=Depends(get_current_user)):
+    """Dependency to check if user is sysadmin"""
+    if current.get('role') != 'sysadmin':
+        raise HTTPException(status_code=403, detail='Acesso negado. Apenas sysadmin pode aceder.')
+    return current
+
+
+@app.get('/admin/smtp/config', tags=['Admin'])
+async def get_smtp_config(current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Get SMTP configuration (sysadmin only)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        config = await repo.get_config()
+
+        if not config:
+            # Return environment variables (masked passwords)
+            return {
+                'source': 'environment',
+                'smtp_host': os.getenv('SMTP_HOST', 'mail.serversmtp.com'),
+                'smtp_port': int(os.getenv('SMTP_PORT', '587')),
+                'smtp_user': os.getenv('SMTP_USER', ''),
+                'smtp_password': '***' if os.getenv('SMTP_PASSWORD') else '',
+                'from_email': os.getenv('SMTP_FROM_EMAIL', 'noreply@saft.aquinos.io'),
+                'from_name': os.getenv('SMTP_FROM_NAME', 'SAFT Doctor'),
+                'app_url': os.getenv('APP_URL', 'https://saft.aquinos.io')
+            }
+
+        # Return database config (mask password)
+        return {
+            'source': 'database',
+            'smtp_host': config.get('smtp_host'),
+            'smtp_port': config.get('smtp_port'),
+            'smtp_user': config.get('smtp_user'),
+            'smtp_password': '***' if config.get('smtp_password') else '',
+            'from_email': config.get('from_email'),
+            'from_name': config.get('from_name'),
+            'app_url': config.get('app_url')
+        }
+    except Exception as e:
+        logger.error(f"Error getting SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao obter configuração SMTP')
+
+
+@app.post('/admin/smtp/config', tags=['Admin'])
+async def save_smtp_config(
+    smtp_host: str,
+    smtp_port: int,
+    smtp_user: str,
+    smtp_password: str,
+    from_email: str,
+    from_name: str,
+    app_url: str,
+    current=Depends(require_sysadmin),
+    db=Depends(get_db)
+):
+    """Save SMTP configuration (sysadmin only)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        config = {
+            'smtp_host': smtp_host,
+            'smtp_port': smtp_port,
+            'smtp_user': smtp_user,
+            'smtp_password': smtp_password,
+            'from_email': from_email,
+            'from_name': from_name,
+            'app_url': app_url
+        }
+
+        await repo.save_config(config)
+        logger.info(f"✅ SMTP config saved by {current['username']}")
+
+        return {
+            'ok': True,
+            'message': 'Configuração SMTP guardada com sucesso'
+        }
+    except Exception as e:
+        logger.error(f"Error saving SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao guardar configuração SMTP')
+
+
+@app.delete('/admin/smtp/config', tags=['Admin'])
+async def delete_smtp_config(current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Delete SMTP configuration (revert to environment variables)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        await repo.delete_config()
+        logger.info(f"✅ SMTP config deleted by {current['username']}, reverting to environment variables")
+
+        return {
+            'ok': True,
+            'message': 'Configuração SMTP eliminada. A usar variáveis de ambiente.'
+        }
+    except Exception as e:
+        logger.error(f"Error deleting SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao eliminar configuração SMTP')
 
 
 from saft_pt_doctor.routers_pt import router as router_pt

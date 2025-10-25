@@ -27,17 +27,26 @@ class EmailService:
     - SMTP_FROM_NAME: From name (default: SAFT Doctor)
     """
 
-    def __init__(self):
+    def __init__(self, config: dict = None):
         # System-wide SMTP configuration (sysadmin only)
-        self.smtp_host = os.getenv('SMTP_HOST', 'mail.serversmtp.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))  # TLS port
-        self.smtp_user = os.getenv('SMTP_USER')
-        self.smtp_password = os.getenv('SMTP_PASSWORD')
-        self.from_email = os.getenv('SMTP_FROM_EMAIL', 'noreply@saft.aquinos.io')
-        self.from_name = os.getenv('SMTP_FROM_NAME', 'SAFT Doctor')
-
-        # Application URL (for links in emails)
-        self.app_url = os.getenv('APP_URL', 'https://saft.aquinos.io')
+        # Can be provided via config dict (from DB) or environment variables
+        if config:
+            self.smtp_host = config.get('smtp_host', 'mail.serversmtp.com')
+            self.smtp_port = int(config.get('smtp_port', 587))
+            self.smtp_user = config.get('smtp_user')
+            self.smtp_password = config.get('smtp_password')
+            self.from_email = config.get('from_email', 'noreply@saft.aquinos.io')
+            self.from_name = config.get('from_name', 'SAFT Doctor')
+            self.app_url = config.get('app_url', 'https://saft.aquinos.io')
+        else:
+            # Fallback to environment variables
+            self.smtp_host = os.getenv('SMTP_HOST', 'mail.serversmtp.com')
+            self.smtp_port = int(os.getenv('SMTP_PORT', '587'))  # TLS port
+            self.smtp_user = os.getenv('SMTP_USER')
+            self.smtp_password = os.getenv('SMTP_PASSWORD')
+            self.from_email = os.getenv('SMTP_FROM_EMAIL', 'noreply@saft.aquinos.io')
+            self.from_name = os.getenv('SMTP_FROM_NAME', 'SAFT Doctor')
+            self.app_url = os.getenv('APP_URL', 'https://saft.aquinos.io')
 
         # Validate configuration
         if not self.smtp_user or not self.smtp_password:
