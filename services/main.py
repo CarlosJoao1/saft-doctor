@@ -495,9 +495,12 @@ async def get_profile(current=Depends(get_current_user), db=Depends(get_db)):
         if not user:
             raise HTTPException(status_code=404, detail='User not found')
 
+        email_value = user.get('email')
+        logger.info(f"Profile loaded for {username}: email={'set' if email_value else 'not set'}")
+
         return {
             'username': user['username'],
-            'email': user.get('email'),
+            'email': email_value if email_value else None,
             'country': country
         }
     except HTTPException:
@@ -573,7 +576,7 @@ async def request_password_reset(data: PasswordResetRequestIn, request: Request,
             logger.warning(f"User {data.username} has no email configured")
             return PasswordResetRequestOut(
                 ok=False,
-                message="Este utilizador não tem email configurado. Contacte o suporte técnico."
+                message="Este utilizador não tem email configurado. Por favor, faça login e adicione um email no seu Perfil (botão ⚙️ Perfil na barra superior)."
             )
 
         # Generate reset token
