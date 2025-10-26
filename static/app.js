@@ -6,15 +6,18 @@ window.state = { token: null, objectKey: null, file: null, username: null };
 try {
     const saved = localStorage.getItem('saft_token');
     const savedUser = localStorage.getItem('saft_username');
+    const savedRole = localStorage.getItem('saft_role');
     console.log('[DEBUG] Startup: Loading token from localStorage');
     console.log('[DEBUG] Startup: Token found?', !!saved);
     console.log('[DEBUG] Startup: Token length:', saved?.length);
     console.log('[DEBUG] Startup: Token preview:', saved?.substring(0, 50));
     console.log('[DEBUG] Startup: Username:', savedUser);
+    console.log('[DEBUG] Startup: Role:', savedRole);
 
     if (saved) {
         window.state.token = saved;
         window.state.username = savedUser || 'Utilizador';
+        window.state.role = savedRole || 'user';
         console.log('[DEBUG] Startup: Token loaded into state');
     } else {
         console.log('[DEBUG] Startup: NO TOKEN in localStorage, user needs to login');
@@ -691,6 +694,7 @@ window.updateNavbar = function() {
     const usernameEl = document.getElementById('navbar-username');
     const logoutBtn = document.getElementById('btn-logout');
     const profileBtn = document.getElementById('btn-profile');
+    const adminTab = document.getElementById('admin-tab');
     const overlay = document.getElementById('login-overlay');
 
     if (window.state.token) {
@@ -698,10 +702,17 @@ window.updateNavbar = function() {
         if (logoutBtn) logoutBtn.style.display = 'block';
         if (profileBtn) profileBtn.style.display = 'block';
         if (overlay) overlay.classList.add('hidden');
+
+        // Show Admin tab only for sysadmin
+        if (adminTab) {
+            adminTab.style.display = (window.state.role === 'sysadmin') ? 'inline-block' : 'none';
+            console.log('[DEBUG] updateNavbar: Admin tab visible:', window.state.role === 'sysadmin');
+        }
     } else {
         if (usernameEl) usernameEl.textContent = 'Não autenticado';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (profileBtn) profileBtn.style.display = 'none';
+        if (adminTab) adminTab.style.display = 'none';
         if (overlay) overlay.classList.remove('hidden');
     }
 };
@@ -1354,6 +1365,22 @@ window.loginUser = async function() {
             console.error('[DEBUG] loginUser: Failed to save to localStorage:', err);
         }
 
+        // Fetch user role
+        try {
+            const meResponse = await fetch('/auth/me', {
+                headers: { 'Authorization': 'Bearer ' + state.token }
+            });
+            if (meResponse.ok) {
+                const meData = await meResponse.json();
+                state.role = meData.role || 'user';
+                localStorage.setItem('saft_role', state.role);
+                console.log('[DEBUG] loginUser: User role:', state.role);
+            }
+        } catch (err) {
+            console.error('[DEBUG] loginUser: Failed to fetch role:', err);
+            state.role = 'user'; // Default to user
+        }
+
         updateNavbar();
         setStatus('✅ Login efetuado: ' + u, 'success');
         logLine('Login OK: ' + u);
@@ -1835,6 +1862,131 @@ window.updateProfileEmail = async function() {
         setStatus('❌ Erro ao atualizar email: ' + e.message, 'error');
         alert('❌ Erro ao atualizar email:\n\n' + e.message);
         logLine('❌ Erro: ' + e.message);
+    }
+};
+
+// ============================================================================
+// SMTP CONFIGURATION FUNCTIONS (Sysadmin only)
+// ============================================================================
+
+window.loadSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    setStatus('🔄 A carregar configuração SMTP...', 'info');
+
+    try {
+        const response = await fetch('/admin/smtp/config', {
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Erro ao carregar configuração');
+        }
+
+        const config = await response.json();
+
+        document.getElementById('smtp-host').value = config.smtp_host || '';
+        document.getElementById('smtp-port').value = config.smtp_port || 587;
+        document.getElementById('smtp-user').value = config.smtp_user || '';
+        document.getElementById('smtp-password').value = config.smtp_password === '***' ? '' : config.smtp_password;
+        document.getElementById('smtp-from-email').value = config.from_email || '';
+        document.getElementById('smtp-from-name').value = config.from_name || '';
+        document.getElementById('smtp-app-url').value = config.app_url || '';
+
+        document.getElementById('smtp-source-text').textContent = config.source === 'database' ? 'Base de Dados' : 'Variáveis de Ambiente';
+        document.getElementById('smtp-config-source').style.display = 'block';
+
+        setStatus('✅ Configuração SMTP carregada', 'success');
+        logLine('SMTP config loaded from: ' + config.source);
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ ' + e.message);
+    }
+};
+
+window.saveSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    const smtpHost = document.getElementById('smtp-host').value.trim();
+    const smtpPort = parseInt(document.getElementById('smtp-port').value);
+    const smtpUser = document.getElementById('smtp-user').value.trim();
+    const smtpPassword = document.getElementById('smtp-password').value;
+    const fromEmail = document.getElementById('smtp-from-email').value.trim();
+    const fromName = document.getElementById('smtp-from-name').value.trim();
+    const appUrl = document.getElementById('smtp-app-url').value.trim();
+
+    if (!smtpHost || !smtpUser || !smtpPassword || !fromEmail) {
+        alert('⚠️ Preencha todos os campos obrigatórios');
+        return;
+    }
+
+    setStatus('💾 A guardar configuração SMTP...', 'info');
+
+    try {
+        const params = new URLSearchParams({
+            smtp_host: smtpHost,
+            smtp_port: smtpPort,
+            smtp_user: smtpUser,
+            smtp_password: smtpPassword,
+            from_email: fromEmail,
+            from_name: fromName,
+            app_url: appUrl
+        });
+
+        const response = await fetch('/admin/smtp/config?' + params.toString(), {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ SMTP config saved');
+            loadSmtpConfig(); // Reload to show updated source
+        } else {
+            throw new Error(data.detail || data.message || 'Erro desconhecido');
+        }
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ Erro ao guardar: ' + e.message);
+    }
+};
+
+window.deleteSmtpConfig = async function() {
+    if (!confirm('⚠️ Eliminar configuração SMTP da base de dados?\n\nO sistema voltará a usar variáveis de ambiente.')) {
+        return;
+    }
+
+    setStatus('🗑️ A eliminar configuração SMTP...', 'info');
+
+    try {
+        const response = await fetch('/admin/smtp/config', {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('SMTP config deleted, reverted to env vars');
+            loadSmtpConfig(); // Reload to show env var config
+        } else {
+            throw new Error(data.detail || data.message || 'Erro desconhecido');
+        }
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ Erro ao eliminar: ' + e.message);
     }
 };
 

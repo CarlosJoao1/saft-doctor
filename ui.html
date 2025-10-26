@@ -502,7 +502,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=46"></script>
+    <script src="/static/app.js?v=47"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -634,6 +634,7 @@
             <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
             <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
             <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
+            <button class="tab" id="admin-tab" data-tab="admin" onclick="showTab('admin')" style="display: none;">👑 Admin</button>
         </div>
 
         <div class="checkbox-label" style="margin-bottom: 1.5rem;">
@@ -1071,6 +1072,68 @@
                 <button class="btn btn-secondary" onclick="presignDownload()">🔗 Gerar URL de download</button>
                 <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; word-break: break-all; font-size: 0.75rem;">
                     <code id="dl_url">(nenhum URL gerado)</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Admin (Sysadmin only) -->
+        <div id="panel-admin" class="tabpanel" style="display: none;">
+            <div class="card">
+                <h3>👑 Painel de Administração (Sysadmin)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Configuração de sistema acessível apenas para administradores.
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-host">SMTP Host</label>
+                    <input type="text" id="smtp-host" placeholder="mail.serversmtp.com" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-port">SMTP Port</label>
+                    <input type="number" id="smtp-port" placeholder="587" value="587" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-user">SMTP Username</label>
+                    <input type="text" id="smtp-user" placeholder="seu-username@serversmtp.com" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-password">SMTP Password</label>
+                    <input type="password" id="smtp-password" placeholder="••••••••" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-email">From Email</label>
+                    <input type="email" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-name">From Name</label>
+                    <input type="text" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-app-url">App URL</label>
+                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" />
+                </div>
+
+                <div class="btn-group" style="margin-top: 1.5rem;">
+                    <button class="btn" onclick="loadSmtpConfig()">🔄 Carregar Config</button>
+                    <button class="btn" onclick="saveSmtpConfig()">💾 Guardar</button>
+                    <button class="btn" onclick="deleteSmtpConfig()" style="background: var(--error);">🗑️ Eliminar</button>
+                </div>
+
+                <div id="smtp-config-source" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); display: none;">
+                    <strong>Origem:</strong> <span id="smtp-source-text">-</span>
                 </div>
             </div>
         </div>
