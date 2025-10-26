@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
+from typing import Optional
 from jose import jwt, JWTError
 
 from core.logging_config import setup_logging, get_logger
@@ -16,7 +17,8 @@ from core.auth_utils import create_access_token, hash_password, verify_password
 setup_logging(level=os.getenv('LOG_LEVEL', 'INFO'))
 logger = get_logger(__name__)
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'change_me')
+# Normalize SECRET_KEY to avoid whitespace issues
+SECRET_KEY = (os.getenv('SECRET_KEY', 'change_me') or 'change_me').strip()
 ALGORITHM = 'HS256'
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')
 
@@ -29,6 +31,101 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+# ---------------- Diagnostics -----------------
+from fastapi import Depends
+from core.deps import get_db
+
+@app.get('/diag')
+async def diagnostics(request: Request, db=Depends(get_db)):
+    """Lightweight diagnostics to match Render behavior in DEV.
+    Checks secret key, Mongo, upload root, Java, JAR and B2 connectivity.
+    """
+    import asyncio, socket, shutil, platform, sys, tempfile
+    from core.storage import Storage
+
+    upload_root = os.getenv('UPLOAD_ROOT', '/var/saft/uploads')
+    jar_path = os.getenv('FACTEMICLI_JAR_PATH', '/opt/factemi/FACTEMICLI.jar')
+
+    # ENV
+    env_info = {
+        'env': os.getenv('APP_ENV','dev'),
+        'secret_key_set': (SECRET_KEY != 'change_me'),
+        'secret_key_len': len(SECRET_KEY) if isinstance(SECRET_KEY,str) else None,
+        'upload_chunk_size': int(os.getenv('UPLOAD_CHUNK_SIZE', str(5*1024*1024))),
+        'python': sys.version,
+        'platform': platform.platform(),
+    }
+
+    # DB
+    db_info = {'ok': False}
+    try:
+        await db.command('ping')
+        db_info.update({'ok': True, 'uri': os.getenv('MONGO_URI') or 'mongodb://mongo:27017', 'db': os.getenv('MONGO_DB','saft_doctor')})
+    except Exception as e:
+        db_info.update({'ok': False, 'error': str(e)})
+
+    # Upload root
+    upload_info = {'path': upload_root, 'ok': False}
+    try:
+        os.makedirs(upload_root, mode=0o755, exist_ok=True)
+    except Exception as e:
+        upload_info.update({'ok': False, 'writable': False, 'error': str(e)})
+    else:
+        # best-effort write test (sync OK for diagnostics)
+        try:
+            test_path = os.path.join(upload_root, '.diag.tmp')
+            with open(test_path, 'w', encoding='utf-8') as f:
+                f.write('ok')
+            os.remove(test_path)
+            total, used, free = shutil.disk_usage(upload_root)
+            upload_info.update({'ok': True, 'writable': True, 'disk': {'total': total, 'used': used, 'free': free}})
+        except Exception as e2:
+            upload_info.update({'ok': False, 'writable': False, 'error': str(e2)})
+
+    # Java
+    java_info = {'ok': False}
+    try:
+        proc = await asyncio.create_subprocess_exec('java','-version', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=5)
+        java_info.update({'ok': proc.returncode==0 or proc.returncode is not None, 'returncode': proc.returncode, 'stdout': (out.decode() if out else ''), 'stderr': (err.decode() if err else '')})
+    except Exception as e:
+        java_info.update({'ok': False, 'error': str(e)})
+
+    # JAR
+    jar_info = {'path': jar_path, 'exists': os.path.isfile(jar_path), 'size': None}
+    try:
+        if jar_info['exists']:
+            jar_info['size'] = os.path.getsize(jar_path)
+    except Exception:
+        pass
+
+    # B2
+    b2_info = {'endpoint': os.getenv('B2_ENDPOINT'), 'region': os.getenv('B2_REGION'), 'bucket': os.getenv('B2_BUCKET'), 'ok': False}
+    try:
+        storage = Storage()
+        def _head():
+            try:
+                storage.client.head_bucket(Bucket=storage.bucket)
+                return True, None
+            except Exception as ex:
+                return False, str(ex)
+        ok, err = await asyncio.to_thread(_head)
+        b2_info['ok'] = ok
+        if not ok:
+            b2_info['error'] = err
+    except Exception as e3:
+        b2_info.update({'ok': False, 'error': str(e3)})
+
+    return {
+        'ok': (env_info['secret_key_set'] and db_info.get('ok') and upload_info.get('ok')),
+        'env': env_info,
+        'db': db_info,
+        'upload': upload_info,
+        'java': java_info,
+        'jar': jar_info,
+        'b2': b2_info,
+    }
 
 # Serve static files (JS/CSS)
 try:
@@ -44,6 +141,7 @@ except Exception as e:
 class RegisterIn(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    email: Optional[str] = None  # Optional email for password reset
 
 
 def country_from_request(request: Request) -> str:
@@ -142,7 +240,9 @@ async def register(user: RegisterIn, request: Request, db=Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=503, detail='Database unavailable (exists check).')
-    created = await repo.create(user.username, hash_password(user.password))
+    pwd_hash = hash_password(user.password)
+    created = await repo.create(user.username, pwd_hash, user.email)
+    logger.info(f"✅ User registered: {user.username}, email: {'set' if user.email else 'not set'}")
     return { 'id': str(created['_id']), 'username': created['username'], 'country': country }
 
 
@@ -169,12 +269,412 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
     u = await UsersRepo(db, country).get(username)
     if not u:
         raise HTTPException(status_code=401, detail='User not found')
-    return { 'username': username, 'country': country }
+    return { 'username': username, 'country': country, 'role': u.get('role', 'user') }
 
 
 @app.get('/auth/me')
 async def auth_me(current=Depends(get_current_user)):
     return current
+
+
+@app.get('/auth/profile', tags=['Authentication'])
+async def get_profile(current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Get current user's profile including email
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        user = await repo.get(username)
+        if not user:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        email_value = user.get('email')
+        logger.info(f"Profile loaded for {username}: email={'set' if email_value else 'not set'}")
+
+        return {
+            'username': user['username'],
+            'email': email_value if email_value else None,
+            'country': country
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Error getting profile')
+
+
+@app.post('/auth/profile/email', tags=['Authentication'])
+async def update_profile_email(email: str, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Update current user's email address
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        # Validate email format (basic validation)
+        if email and '@' not in email:
+            raise HTTPException(status_code=400, detail='Email inválido')
+
+        # Update email
+        await repo.update_email(username, email)
+
+        logger.info(f"✅ Email updated for user {username}")
+
+        return {
+            'ok': True,
+            'message': 'Email atualizado com sucesso',
+            'email': email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating email: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao atualizar email')
+
+
+@app.post('/auth/profile/change-password', tags=['Authentication'])
+async def change_password(current_password: str, new_password: str, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Change current user's password (requires current password for security)
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        # Get user and verify current password
+        user = await repo.get(username)
+        if not user:
+            raise HTTPException(status_code=404, detail='Utilizador não encontrado')
+
+        # Verify current password
+        if not verify_password(current_password, user['password_hash']):
+            raise HTTPException(status_code=400, detail='Password atual incorreta')
+
+        # Validate new password
+        if len(new_password) < 3:
+            raise HTTPException(status_code=400, detail='Nova password deve ter pelo menos 3 caracteres')
+
+        # Update password
+        new_hash = hash_password(new_password)
+        await repo.update_password(username, new_hash)
+
+        logger.info(f"✅ Password changed for user {username}")
+
+        return {
+            'ok': True,
+            'message': 'Password alterada com sucesso'
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing password: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao alterar password')
+
+
+# SMTP Configuration Endpoints (Sysadmin only)
+from core.smtp_config_repo import SMTPConfigRepo
+
+def require_sysadmin(current=Depends(get_current_user)):
+    """Dependency to check if user is sysadmin"""
+    if current.get('role') != 'sysadmin':
+        raise HTTPException(status_code=403, detail='Acesso negado. Apenas sysadmin pode aceder.')
+    return current
+
+
+@app.get('/admin/smtp/config', tags=['Admin'])
+async def get_smtp_config(current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Get SMTP configuration (sysadmin only)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        config = await repo.get_config()
+
+        if not config:
+            # Return environment variables (masked passwords)
+            return {
+                'source': 'environment',
+                'smtp_host': os.getenv('SMTP_HOST', 'mail.serversmtp.com'),
+                'smtp_port': int(os.getenv('SMTP_PORT', '587')),
+                'smtp_user': os.getenv('SMTP_USER', ''),
+                'smtp_password': '***' if os.getenv('SMTP_PASSWORD') else '',
+                'from_email': os.getenv('SMTP_FROM_EMAIL', 'noreply@saft.aquinos.io'),
+                'from_name': os.getenv('SMTP_FROM_NAME', 'SAFT Doctor'),
+                'app_url': os.getenv('APP_URL', 'https://saft.aquinos.io')
+            }
+
+        # Return database config (mask password)
+        return {
+            'source': 'database',
+            'smtp_host': config.get('smtp_host'),
+            'smtp_port': config.get('smtp_port'),
+            'smtp_user': config.get('smtp_user'),
+            'smtp_password': '***' if config.get('smtp_password') else '',
+            'from_email': config.get('from_email'),
+            'from_name': config.get('from_name'),
+            'app_url': config.get('app_url')
+        }
+    except Exception as e:
+        logger.error(f"Error getting SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao obter configuração SMTP')
+
+
+@app.post('/admin/smtp/config', tags=['Admin'])
+async def save_smtp_config(
+    smtp_host: str,
+    smtp_port: int,
+    smtp_user: str,
+    smtp_password: str,
+    from_email: str,
+    from_name: str,
+    app_url: str,
+    current=Depends(require_sysadmin),
+    db=Depends(get_db)
+):
+    """Save SMTP configuration (sysadmin only)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        config = {
+            'smtp_host': smtp_host,
+            'smtp_port': smtp_port,
+            'smtp_user': smtp_user,
+            'smtp_password': smtp_password,
+            'from_email': from_email,
+            'from_name': from_name,
+            'app_url': app_url
+        }
+
+        await repo.save_config(config)
+        logger.info(f"✅ SMTP config saved by {current['username']}")
+
+        return {
+            'ok': True,
+            'message': 'Configuração SMTP guardada com sucesso'
+        }
+    except Exception as e:
+        logger.error(f"Error saving SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao guardar configuração SMTP')
+
+
+@app.delete('/admin/smtp/config', tags=['Admin'])
+async def delete_smtp_config(current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Delete SMTP configuration (revert to environment variables)"""
+    country = current.get('country', 'pt')
+    repo = SMTPConfigRepo(db, country)
+
+    try:
+        await repo.delete_config()
+        logger.info(f"✅ SMTP config deleted by {current['username']}, reverting to environment variables")
+
+        return {
+            'ok': True,
+            'message': 'Configuração SMTP eliminada. A usar variáveis de ambiente.'
+        }
+    except Exception as e:
+        logger.error(f"Error deleting SMTP config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao eliminar configuração SMTP')
+
+
+@app.post('/admin/smtp/test', tags=['Admin'])
+async def test_smtp_config(test_email: str, current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Test SMTP configuration by sending a test email"""
+    from core.email_service import EmailService
+
+    country = current.get('country', 'pt')
+    smtp_repo = SMTPConfigRepo(db, country)
+
+    try:
+        # Load SMTP config from DB or env vars
+        smtp_config = await smtp_repo.get_config()
+        email_service = EmailService(smtp_config)
+
+        if not email_service.is_configured():
+            return {
+                'ok': False,
+                'message': 'SMTP não configurado. Configure primeiro as credenciais SMTP.'
+            }
+
+        # Send test email
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        import smtplib
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'SAFT Doctor - Teste de Configuração SMTP'
+        msg['From'] = f'{email_service.from_name} <{email_service.from_email}>'
+        msg['To'] = test_email
+
+        text_body = f"""
+        SAFT Doctor - Teste de Email
+
+        Esta é uma mensagem de teste para verificar a configuração SMTP.
+
+        Configuração atual:
+        - SMTP Host: {email_service.smtp_host}
+        - SMTP Port: {email_service.smtp_port}
+        - From: {email_service.from_email}
+
+        Se recebeu este email, a configuração está a funcionar corretamente!
+
+        ---
+        SAFT Doctor
+        {email_service.app_url}
+        """
+
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #2563eb;">✅ SAFT Doctor - Teste de Email</h2>
+                <p>Esta é uma mensagem de teste para verificar a configuração SMTP.</p>
+
+                <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0;">
+                    <h3 style="margin-top: 0;">Configuração atual:</h3>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>SMTP Host:</strong> {email_service.smtp_host}</li>
+                        <li><strong>SMTP Port:</strong> {email_service.smtp_port}</li>
+                        <li><strong>From:</strong> {email_service.from_email}</li>
+                    </ul>
+                </div>
+
+                <p style="color: #10b981; font-weight: bold;">
+                    Se recebeu este email, a configuração está a funcionar corretamente! 🎉
+                </p>
+
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+                <p style="color: #64748b; font-size: 0.875rem;">
+                    SAFT Doctor<br>
+                    <a href="{email_service.app_url}" style="color: #2563eb;">{email_service.app_url}</a>
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+        with smtplib.SMTP(email_service.smtp_host, email_service.smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_service.smtp_user, email_service.smtp_password)
+            server.send_message(msg)
+
+        logger.info(f"✅ Test email sent successfully to {test_email} by {current['username']}")
+
+        return {
+            'ok': True,
+            'message': f'✅ Email de teste enviado para {test_email}. Verifique a sua caixa de entrada!'
+        }
+
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP Authentication failed: {e}")
+        return {
+            'ok': False,
+            'message': f'❌ Erro de autenticação SMTP. Verifique username e password.'
+        }
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error: {e}")
+        return {
+            'ok': False,
+            'message': f'❌ Erro SMTP: {str(e)}'
+        }
+    except Exception as e:
+        logger.error(f"Error testing SMTP: {e}", exc_info=True)
+        return {
+            'ok': False,
+            'message': f'❌ Erro ao enviar email de teste: {str(e)}'
+        }
+
+
+# Password Reset Endpoints
+from core.models import PasswordResetRequestIn, PasswordResetRequestOut, PasswordResetConfirmIn, PasswordResetConfirmOut
+from core.password_reset_repo import PasswordResetRepo
+
+@app.post('/auth/password-reset/request', tags=['Authentication'], response_model=PasswordResetRequestOut)
+async def request_password_reset(data: PasswordResetRequestIn, request: Request, db=Depends(get_db)):
+    """Request password reset - sends email with reset token"""
+    from core.email_service import EmailService
+
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+    smtp_repo = SMTPConfigRepo(db, country)
+
+    try:
+        user = await repo.get(data.username)
+        if not user:
+            return PasswordResetRequestOut(ok=True, message="Se o username existir e tiver email configurado, receberá um email com instruções.")
+
+        user_email = user.get('email')
+        if not user_email:
+            return PasswordResetRequestOut(ok=False, message="Este utilizador não tem email configurado. Por favor, faça login e adicione um email no seu Perfil (botão ⚙️ Perfil na barra superior).")
+
+        reset_token = await reset_repo.create_reset_token(data.username, user_email)
+
+        # Load SMTP config from DB or use env vars
+        smtp_config = await smtp_repo.get_config()
+        email_service = EmailService(smtp_config)
+
+        if email_service.is_configured():
+            email_sent = email_service.send_password_reset_email(to_email=user_email, username=data.username, reset_token=reset_token)
+            if email_sent:
+                logger.info(f"✅ Password reset email sent to {user_email}")
+                return PasswordResetRequestOut(ok=True, message=f"Email enviado para {user_email}. Verifique a sua caixa de entrada e spam.")
+            else:
+                return PasswordResetRequestOut(ok=False, message="Erro ao enviar email. Contacte o suporte técnico.")
+        else:
+            return PasswordResetRequestOut(ok=False, message="Serviço de email não configurado. Contacte o administrador do sistema.")
+    except Exception as e:
+        logger.error(f"Error in password reset: {e}", exc_info=True)
+        return PasswordResetRequestOut(ok=False, message="Erro ao processar pedido.")
+
+
+@app.post('/auth/password-reset/confirm', tags=['Authentication'], response_model=PasswordResetConfirmOut)
+async def confirm_password_reset(data: PasswordResetConfirmIn, request: Request, db=Depends(get_db)):
+    """Confirm password reset with token and set new password"""
+    country = country_from_request(request)
+    repo = UsersRepo(db, country)
+    reset_repo = PasswordResetRepo(db)
+
+    try:
+        token_doc = await reset_repo.validate_token(data.token)
+        if not token_doc:
+            return PasswordResetConfirmOut(ok=False, message="Link de recuperação inválido ou expirado.")
+
+        if len(data.new_password) < 3:
+            return PasswordResetConfirmOut(ok=False, message="Password deve ter pelo menos 3 caracteres.")
+
+        new_hash = hash_password(data.new_password)
+        await repo.update_password(token_doc['username'], new_hash)
+        await reset_repo.mark_token_used(data.token)
+
+        logger.info(f"✅ Password reset successful for {token_doc['username']}")
+        return PasswordResetConfirmOut(ok=True, message="Password alterada com sucesso!")
+    except Exception as e:
+        logger.error(f"Error in password reset confirm: {e}", exc_info=True)
+        return PasswordResetConfirmOut(ok=False, message="Erro ao alterar password.")
+
+
+@app.get('/auth/check-reset-token', tags=['Authentication'])
+async def check_reset_token(token: str, db=Depends(get_db)):
+    """Check if password reset token is valid"""
+    try:
+        token_doc = await PasswordResetRepo(db).validate_token(token)
+        if token_doc:
+            return {'ok': True, 'valid': True, 'username': token_doc['username']}
+        else:
+            return {'ok': True, 'valid': False, 'reason': 'Token inválido ou expirado'}
+    except Exception as e:
+        logger.error(f"Error checking token: {e}")
+        return {'ok': False, 'valid': False, 'reason': 'Erro ao validar token'}
 
 
 from saft_pt_doctor.routers_pt import router as router_pt

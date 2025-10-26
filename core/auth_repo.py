@@ -3,8 +3,11 @@ from datetime import datetime, timezone
 class UsersRepo:
     def __init__(self,db,country:str): self.col=scoped_collection(db,'users',country)
     async def exists(self,u:str): return await self.col.find_one({'username':u}) is not None
-    async def create(self,u:str,h:str):
-        res=await self.col.insert_one({'username':u,'password_hash':h,'at':None,'created_at':datetime.now(timezone.utc)}); return {'_id':res.inserted_id,'username':u}
+    async def create(self,u:str,h:str,email:str=None):
+        # Check if this is the first user (make them sysadmin)
+        count = await self.col.count_documents({})
+        role = 'sysadmin' if count == 0 else 'user'
+        res=await self.col.insert_one({'username':u,'password_hash':h,'email':email,'role':role,'at':None,'created_at':datetime.now(timezone.utc)}); return {'_id':res.inserted_id,'username':u,'role':role}
     async def get(self,u:str): return await self.col.find_one({'username':u})
     async def save_encrypted_at_credentials(self,u:str,euser:str,epass:str):
         await self.col.update_one(
@@ -32,5 +35,21 @@ class UsersRepo:
         await self.col.update_one(
             { 'username': u },
             { '$unset': { f'at_entries.{ident_enc}': '' } }
+        )
+        return True
+
+    async def update_password(self, u: str, new_hash: str):
+        """Update user password"""
+        await self.col.update_one(
+            { 'username': u },
+            { '$set': { 'password_hash': new_hash, 'password_updated_at': datetime.now(timezone.utc) } }
+        )
+        return True
+
+    async def update_email(self, u: str, email: str):
+        """Update user email"""
+        await self.col.update_one(
+            { 'username': u },
+            { '$set': { 'email': email, 'email_updated_at': datetime.now(timezone.utc) } }
         )
         return True

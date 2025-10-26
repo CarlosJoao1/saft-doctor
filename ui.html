@@ -350,8 +350,159 @@
                 justify-content: center;
             }
         }
+
+        /* Help Widget Styles */
+        .help-widget-button {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .help-widget-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 25px -5px rgb(0 0 0 / 0.2);
+        }
+        .help-widget-panel {
+            position: fixed;
+            bottom: 150px;
+            right: 20px;
+            width: 380px;
+            max-height: 500px;
+            background: var(--surface);
+            border-radius: 8px;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
+            z-index: 998;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .help-widget-panel.open {
+            display: flex;
+        }
+        .help-widget-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .help-widget-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .help-widget-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .help-widget-search {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .help-widget-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        .help-widget-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+        }
+        .help-section {
+            margin-bottom: 1rem;
+        }
+        .help-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .help-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .help-item:hover {
+            border-color: var(--primary);
+        }
+        .help-item-question {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+        }
+        .help-item-answer {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            display: none;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .help-item.expanded .help-item-answer {
+            display: block;
+        }
+        .help-widget-footer {
+            padding: 0.75rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg);
+            text-align: center;
+        }
+        .help-widget-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .help-widget-footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 768px) {
+            .help-widget-panel {
+                right: 10px;
+                left: 10px;
+                width: auto;
+                bottom: 140px;
+            }
+            .help-widget-button {
+                right: 10px;
+            }
+        }
     </style>
-    <script src="/static/app.js?v=43"></script>
+    <script src="/static/app.js?v=51"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -364,6 +515,9 @@
                 <span>👤</span>
                 <span id="navbar-username">Não autenticado</span>
             </div>
+            <button class="btn-logout" onclick="showProfileModal()" id="btn-profile" style="display: none; margin-right: 0.5rem;">
+                ⚙️ Perfil
+            </button>
             <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
                 Sair
             </button>
@@ -394,7 +548,12 @@
                 <div class="btn-group" style="margin-top: 1rem;">
                     <button class="btn" onclick="doLogin()">🔓 Entrar</button>
                 </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                <div style="margin-top: 1rem; text-align: center;">
+                    <button type="button" onclick="showAuthTab('password-reset')" style="background: none; border: none; font-size: 0.875rem; color: var(--primary); text-decoration: underline; cursor: pointer; padding: 0;">
+                        Esqueceu a password?
+                    </button>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
                     Utilize <strong>dev/dev</strong> para acesso rápido
                 </div>
             </div>
@@ -404,6 +563,13 @@
                 <div class="form-group">
                     <label class="form-label">Username</label>
                     <input type="text" id="register_user" placeholder="username" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email (opcional)</label>
+                    <input type="email" id="register_email" placeholder="seu@email.com" />
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        Recomendado para recuperação de password
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Password</label>
@@ -420,6 +586,40 @@
                     Após registar, faça login com as suas credenciais
                 </div>
             </div>
+
+            <!-- Password Reset Request Form -->
+            <div id="password-reset-form" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="reset_username" placeholder="username" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="requestPasswordReset()">📧 Enviar Email</button>
+                    <button class="btn" onclick="showAuthTab('login')" style="background: var(--text-secondary);">Voltar</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Receberá um email com instruções para recuperar a password
+                </div>
+            </div>
+
+            <!-- New Password Form (shown when URL has reset_token) -->
+            <div id="new-password-form" style="display: none;">
+                <h3 style="margin-bottom: 1rem; color: var(--primary);">Criar Nova Password</h3>
+                <div class="form-group">
+                    <label class="form-label">Nova Password</label>
+                    <input type="password" id="new_password" placeholder="nova password" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar Password</label>
+                    <input type="password" id="new_password_confirm" placeholder="confirme a nova password" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="confirmPasswordReset()">✅ Guardar Password</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Após guardar, poderá fazer login com a nova password
+                </div>
+            </div>
         </div>
     </div>
 
@@ -434,6 +634,7 @@
             <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
             <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
             <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
+            <button class="tab" id="admin-tab" data-tab="admin" onclick="showTab('admin')" style="display: none;">👑 Admin</button>
         </div>
 
         <div class="checkbox-label" style="margin-bottom: 1.5rem;">
@@ -874,10 +1075,403 @@
                 </div>
             </div>
         </div>
+
+        <!-- TAB: Admin (Sysadmin only) -->
+        <div id="panel-admin" class="tabpanel">
+            <div class="card">
+                <h3>👑 Painel de Administração (Sysadmin)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Configuração de sistema acessível apenas para administradores.
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-host">SMTP Host</label>
+                    <input type="text" id="smtp-host" placeholder="mail.serversmtp.com" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-port">SMTP Port</label>
+                    <input type="number" id="smtp-port" placeholder="587" value="587" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-user">SMTP Username</label>
+                    <input type="text" id="smtp-user" placeholder="seu-username@serversmtp.com" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-password">SMTP Password</label>
+                    <input type="password" id="smtp-password" placeholder="••••••••" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-email">From Email</label>
+                    <input type="email" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-name">From Name</label>
+                    <input type="text" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-app-url">URL da Aplicação ⚠️ (Obrigatório para links de reset)</label>
+                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
+                    <small style="color: var(--text-secondary);">
+                        URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)
+                    </small>
+                </div>
+
+                <div class="btn-group" style="margin-top: 1.5rem;">
+                    <button class="btn" onclick="loadSmtpConfig()">🔄 Carregar Config</button>
+                    <button class="btn" onclick="saveSmtpConfig()">💾 Guardar</button>
+                    <button class="btn" onclick="deleteSmtpConfig()" style="background: var(--error);">🗑️ Eliminar</button>
+                </div>
+
+                <div id="smtp-config-source" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); display: none;">
+                    <strong>Origem:</strong> <span id="smtp-source-text">-</span>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;">✉️ Testar Configuração SMTP</h4>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                        Envie um email de teste para verificar se a configuração está a funcionar.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label" for="smtp-test-email">Email de Teste</label>
+                        <input type="email" id="smtp-test-email" placeholder="seu@email.com" />
+                    </div>
+                    <button class="btn" onclick="testSmtpConfig()" style="background: var(--success);">📧 Enviar Email de Teste</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="status-bar">
         <div class="status-text" id="status">Pronto para validar ficheiros SAFT-T</div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="login-overlay" id="profile-overlay" style="display: none;">
+        <div class="login-card" style="max-width: 500px;">
+            <h2 style="margin-bottom: 1.5rem;">⚙️ Perfil de Utilizador</h2>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-username">Username</label>
+                <input type="text" id="profile-username" disabled style="background: var(--bg); cursor: not-allowed;" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-email">Email</label>
+                <input type="email" id="profile-email" placeholder="seu@email.com" />
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    Necessário para recuperação de password
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
+            </div>
+
+            <!-- Change Password Section -->
+            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">🔐 Alterar Password</h3>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-current-password">Password Atual</label>
+                    <input type="password" id="profile-current-password" placeholder="password atual" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password">Nova Password</label>
+                    <input type="password" id="profile-new-password" placeholder="nova password" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password-confirm">Confirmar Nova Password</label>
+                    <input type="password" id="profile-new-password-confirm" placeholder="confirme a nova password" />
+                </div>
+
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="changePasswordFromProfile()" style="background: var(--warning);">🔑 Alterar Password</button>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1.5rem;">
+                <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Widget -->
+    <button class="help-widget-button" onclick="toggleHelpWidget()" title="Ajuda">
+        💬
+    </button>
+
+    <div class="help-widget-panel" id="help-widget-panel">
+        <div class="help-widget-header">
+            <h3>❓ Centro de Ajuda</h3>
+            <button class="help-widget-close" onclick="toggleHelpWidget()">×</button>
+        </div>
+
+        <div class="help-widget-search">
+            <input type="text" id="help-search" placeholder="🔍 Pesquisar ajuda..." oninput="filterHelpItems()">
+        </div>
+
+        <div class="help-widget-content" id="help-widget-content">
+            <!-- Autenticação -->
+            <div class="help-section">
+                <div class="help-section-title">🔐 Autenticação</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como criar uma conta?</div>
+                    <div class="help-item-answer">
+                        1. Clique em "Registar" no formulário de login<br>
+                        2. Preencha username, password e confirme a password<br>
+                        3. Adicione um email (opcional, mas recomendado para recuperação de password)<br>
+                        4. Clique em "Registar"
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Esqueci-me da minha password. O que fazer?</div>
+                    <div class="help-item-answer">
+                        1. No formulário de login, clique em "Esqueceu a password?"<br>
+                        2. Introduza o seu username<br>
+                        3. Receberá um email com um link para criar nova password<br>
+                        4. O link é válido por 1 hora<br>
+                        <strong>Nota:</strong> Só funciona se tiver registado um email na conta.
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Posso alterar o meu email?</div>
+                    <div class="help-item-answer">
+                        Atualmente não existe interface para alterar o email. Entre em contacto com o administrador do sistema se precisar de alterar o email associado à sua conta.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validação de Ficheiros -->
+            <div class="help-section">
+                <div class="help-section-title">📄 Validação de Ficheiros</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como validar um ficheiro SAFT?</div>
+                    <div class="help-item-answer">
+                        1. No separador "Validar", clique em "Escolher ficheiro"<br>
+                        2. Selecione o ficheiro .xml do SAFT<br>
+                        3. Clique em "Validar SAFT"<br>
+                        4. Aguarde o resultado (pode demorar alguns segundos)<br>
+                        5. O resultado aparece na secção "Resultado da Validação"
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Que tipos de erros podem aparecer?</div>
+                    <div class="help-item-answer">
+                        <strong>Erros estruturais:</strong> XML malformado, tags incorretas<br>
+                        <strong>Erros de validação:</strong> Campos obrigatórios em falta, formatos incorretos<br>
+                        <strong>Erros de negócio:</strong> Totais incorretos, NIFs inválidos, datas inconsistentes<br>
+                        <strong>Avisos:</strong> Situações que podem precisar de atenção mas não impedem a submissão
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">O ficheiro passou na validação. Posso submeter?</div>
+                    <div class="help-item-answer">
+                        Sim! Se a validação passou sem erros críticos, pode proceder à submissão:<br>
+                        1. Vá ao separador "Submeter"<br>
+                        2. Faça upload do ficheiro validado<br>
+                        3. Clique em "Submeter à AT"<br>
+                        <strong>Nota:</strong> Precisa ter credenciais AT configuradas primeiro.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credenciais AT -->
+            <div class="help-section">
+                <div class="help-section-title">🔑 Credenciais AT</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como adicionar credenciais da Autoridade Tributária?</div>
+                    <div class="help-item-answer">
+                        1. Vá ao separador "Credenciais AT"<br>
+                        2. Preencha o NIF da empresa<br>
+                        3. Introduza o username e password do Portal das Finanças<br>
+                        4. Clique em "Guardar Credenciais"<br>
+                        <strong>Segurança:</strong> As credenciais são encriptadas antes de serem guardadas.
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Posso ter credenciais para várias empresas?</div>
+                    <div class="help-item-answer">
+                        Sim! Pode guardar credenciais para múltiplas empresas (NIFs diferentes). Quando submeter um ficheiro, o sistema usa automaticamente as credenciais do NIF correspondente no SAFT.
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como editar ou eliminar credenciais?</div>
+                    <div class="help-item-answer">
+                        Na tabela de credenciais:<br>
+                        - <strong>👁️ Ver:</strong> Mostra a password (temporariamente)<br>
+                        - <strong>✏️ Editar:</strong> Permite alterar username/password<br>
+                        - <strong>🗑️ Eliminar:</strong> Remove as credenciais (pede confirmação)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submissão -->
+            <div class="help-section">
+                <div class="help-section-title">🚀 Submissão</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como submeter um ficheiro SAFT à AT?</div>
+                    <div class="help-item-answer">
+                        1. Certifique-se que tem credenciais AT configuradas para o NIF<br>
+                        2. Vá ao separador "Submeter"<br>
+                        3. Faça upload do ficheiro SAFT validado<br>
+                        4. Clique em "Submeter à AT"<br>
+                        5. Aguarde (pode demorar alguns minutos)<br>
+                        6. O resultado da submissão aparece no histórico
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">A submissão falhou. O que fazer?</div>
+                    <div class="help-item-answer">
+                        <strong>Verifique:</strong><br>
+                        - As credenciais AT estão corretas?<br>
+                        - O ficheiro foi validado com sucesso?<br>
+                        - Tem conexão à internet?<br>
+                        - O Portal das Finanças está disponível?<br>
+                        <br>
+                        Se o problema persistir, consulte os logs no separador "Histórico" para mais detalhes.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Histórico -->
+            <div class="help-section">
+                <div class="help-section-title">📊 Histórico</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como ver o histórico de validações?</div>
+                    <div class="help-item-answer">
+                        Vá ao separador "Histórico" para ver:<br>
+                        - Todas as validações/submissões anteriores<br>
+                        - Data e hora de cada operação<br>
+                        - NIF, ano fiscal, mês<br>
+                        - Status (sucesso/erro)<br>
+                        - Logs detalhados
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como exportar dados para Excel?</div>
+                    <div class="help-item-answer">
+                        <strong>Exportar histórico:</strong><br>
+                        1. Vá ao separador "Histórico"<br>
+                        2. Clique em "Exportar para Excel"<br>
+                        <br>
+                        <strong>Exportar documentos:</strong><br>
+                        1. Vá ao separador "Documentos"<br>
+                        2. Clique em "Exportar para Excel"<br>
+                        <br>
+                        O ficheiro é descarregado automaticamente.
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Posso eliminar registos do histórico?</div>
+                    <div class="help-item-answer">
+                        Sim! Clique no botão "Eliminar" ao lado de cada registo. Isto irá:<br>
+                        - Remover o registo da base de dados<br>
+                        - Eliminar o ficheiro ZIP associado do Backblaze B2<br>
+                        <strong>Atenção:</strong> Esta ação é irreversível!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Documentos -->
+            <div class="help-section">
+                <div class="help-section-title">📑 Documentos</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">O que são os "Documentos"?</div>
+                    <div class="help-item-answer">
+                        Quando valida um ficheiro SAFT, o sistema extrai automaticamente todos os documentos (faturas, notas de crédito, etc.) e apresenta-os numa tabela organizada com:<br>
+                        - Tipo de documento<br>
+                        - Número e série<br>
+                        - Data de emissão<br>
+                        - Cliente<br>
+                        - Valores (base, IVA, total)
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Como pesquisar documentos?</div>
+                    <div class="help-item-answer">
+                        Use a caixa de pesquisa no separador "Documentos" para filtrar por:<br>
+                        - Número de documento<br>
+                        - Nome do cliente<br>
+                        - NIF do cliente<br>
+                        - Tipo de documento<br>
+                        A pesquisa é instantânea enquanto escreve.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Problemas Comuns -->
+            <div class="help-section">
+                <div class="help-section-title">⚠️ Problemas Comuns</div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">O botão de validação não funciona</div>
+                    <div class="help-item-answer">
+                        Verifique se:<br>
+                        - Selecionou um ficheiro .xml<br>
+                        - O ficheiro não está vazio<br>
+                        - Tem sessão iniciada (token válido)<br>
+                        - Tente fazer refresh à página (F5)
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Erro "Token inválido ou expirado"</div>
+                    <div class="help-item-answer">
+                        A sua sessão expirou. Faça login novamente:<br>
+                        1. Recarregue a página (F5)<br>
+                        2. Introduza username e password<br>
+                        3. Clique em "Entrar"
+                    </div>
+                </div>
+
+                <div class="help-item" onclick="toggleHelpItem(this)">
+                    <div class="help-item-question">Os dados não aparecem após validação</div>
+                    <div class="help-item-answer">
+                        Isto pode acontecer se:<br>
+                        - O ficheiro SAFT não tem documentos<br>
+                        - Houve um erro na validação<br>
+                        - Problema de cache do browser<br>
+                        <br>
+                        <strong>Solução:</strong> Force refresh (Ctrl+F5) e valide novamente.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="help-widget-footer">
+            <a href="mailto:support@saft-doctor.com">📧 Contactar Suporte</a>
+        </div>
     </div>
 </body>
 </html>

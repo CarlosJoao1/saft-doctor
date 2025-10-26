@@ -6,15 +6,18 @@ window.state = { token: null, objectKey: null, file: null, username: null };
 try {
     const saved = localStorage.getItem('saft_token');
     const savedUser = localStorage.getItem('saft_username');
+    const savedRole = localStorage.getItem('saft_role');
     console.log('[DEBUG] Startup: Loading token from localStorage');
     console.log('[DEBUG] Startup: Token found?', !!saved);
     console.log('[DEBUG] Startup: Token length:', saved?.length);
     console.log('[DEBUG] Startup: Token preview:', saved?.substring(0, 50));
     console.log('[DEBUG] Startup: Username:', savedUser);
+    console.log('[DEBUG] Startup: Role:', savedRole);
 
     if (saved) {
         window.state.token = saved;
         window.state.username = savedUser || 'Utilizador';
+        window.state.role = savedRole || 'user';
         console.log('[DEBUG] Startup: Token loaded into state');
     } else {
         console.log('[DEBUG] Startup: NO TOKEN in localStorage, user needs to login');
@@ -690,15 +693,26 @@ window.showIssuesPopup = function(issues) {
 window.updateNavbar = function() {
     const usernameEl = document.getElementById('navbar-username');
     const logoutBtn = document.getElementById('btn-logout');
+    const profileBtn = document.getElementById('btn-profile');
+    const adminTab = document.getElementById('admin-tab');
     const overlay = document.getElementById('login-overlay');
-    
+
     if (window.state.token) {
         if (usernameEl) usernameEl.textContent = window.state.username || 'Utilizador';
         if (logoutBtn) logoutBtn.style.display = 'block';
+        if (profileBtn) profileBtn.style.display = 'block';
         if (overlay) overlay.classList.add('hidden');
+
+        // Show Admin tab only for sysadmin
+        if (adminTab) {
+            adminTab.style.display = (window.state.role === 'sysadmin') ? 'inline-block' : 'none';
+            console.log('[DEBUG] updateNavbar: Admin tab visible:', window.state.role === 'sysadmin');
+        }
     } else {
         if (usernameEl) usernameEl.textContent = 'Não autenticado';
         if (logoutBtn) logoutBtn.style.display = 'none';
+        if (profileBtn) profileBtn.style.display = 'none';
+        if (adminTab) adminTab.style.display = 'none';
         if (overlay) overlay.classList.remove('hidden');
     }
 };
@@ -1351,6 +1365,22 @@ window.loginUser = async function() {
             console.error('[DEBUG] loginUser: Failed to save to localStorage:', err);
         }
 
+        // Fetch user role
+        try {
+            const meResponse = await fetch('/auth/me', {
+                headers: { 'Authorization': 'Bearer ' + state.token }
+            });
+            if (meResponse.ok) {
+                const meData = await meResponse.json();
+                state.role = meData.role || 'user';
+                localStorage.setItem('saft_role', state.role);
+                console.log('[DEBUG] loginUser: User role:', state.role);
+            }
+        } catch (err) {
+            console.error('[DEBUG] loginUser: Failed to fetch role:', err);
+            state.role = 'user'; // Default to user
+        }
+
         updateNavbar();
         setStatus('✅ Login efetuado: ' + u, 'success');
         logLine('Login OK: ' + u);
@@ -1364,29 +1394,38 @@ window.doLogin = async function() {
     await loginUser();
 };
 
-// Switch between login and register tabs
+// Switch between login, register, and password-reset tabs
 window.showAuthTab = function(tab) {
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
+    const passwordResetForm = document.getElementById('password-reset-form');
     const loginTabBtn = document.getElementById('login-tab-btn');
     const registerTabBtn = document.getElementById('register-tab-btn');
 
+    // Hide all forms
+    loginForm.style.display = 'none';
+    registerForm.style.display = 'none';
+    passwordResetForm.style.display = 'none';
+
     if (tab === 'login') {
         loginForm.style.display = 'block';
-        registerForm.style.display = 'none';
         loginTabBtn.style.background = '';
         registerTabBtn.style.background = 'var(--text-secondary)';
     } else if (tab === 'register') {
-        loginForm.style.display = 'none';
         registerForm.style.display = 'block';
         loginTabBtn.style.background = 'var(--text-secondary)';
         registerTabBtn.style.background = '';
+    } else if (tab === 'password-reset') {
+        passwordResetForm.style.display = 'block';
+        loginTabBtn.style.background = 'var(--text-secondary)';
+        registerTabBtn.style.background = 'var(--text-secondary)';
     }
 };
 
 // Register new user
 window.doRegister = async function() {
     const username = document.getElementById('register_user').value.trim();
+    const email = document.getElementById('register_email').value.trim();
     const password = document.getElementById('register_pass').value;
     const passwordConfirm = document.getElementById('register_pass_confirm').value;
 
@@ -1409,10 +1448,15 @@ window.doRegister = async function() {
     logLine('Registar utilizador: ' + username);
 
     try {
+        const payload = { username: username, password: password };
+        if (email) {
+            payload.email = email;
+        }
+
         const response = await fetch('/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username, password: password })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
@@ -1422,10 +1466,11 @@ window.doRegister = async function() {
         }
 
         setStatus('✅ Conta criada com sucesso!', 'success');
-        logLine('✅ Utilizador registado: ' + username);
+        logLine('✅ Utilizador registado: ' + username + (email ? ' (email: ' + email + ')' : ''));
 
         // Clear form
         document.getElementById('register_user').value = '';
+        document.getElementById('register_email').value = '';
         document.getElementById('register_pass').value = '';
         document.getElementById('register_pass_confirm').value = '';
 
@@ -1445,6 +1490,166 @@ window.doRegister = async function() {
     }
 };
 
+// Password Reset Functions
+
+// Request password reset
+window.requestPasswordReset = async function() {
+    const username = document.getElementById('reset_username').value.trim();
+
+    if (!username) {
+        alert('⚠️ Preencha o username');
+        return;
+    }
+
+    setStatus('📧 A enviar email de recuperação...', 'info');
+    logLine('Password reset solicitado para: ' + username);
+
+    try {
+        const response = await fetch('/auth/password-reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            logLine('✅ ' + data.message);
+            alert('✅ ' + data.message);
+
+            // Clear form and go back to login
+            document.getElementById('reset_username').value = '';
+            showAuthTab('login');
+        } else {
+            setStatus('❌ ' + data.message, 'error');
+            logLine('❌ ' + data.message);
+            alert('❌ ' + data.message);
+        }
+
+    } catch (e) {
+        setStatus('❌ Erro ao solicitar reset: ' + e.message, 'error');
+        logLine('❌ Erro: ' + e.message);
+        alert('❌ Erro ao solicitar reset:\n\n' + e.message);
+    }
+};
+
+// Confirm password reset (when URL has reset_token)
+window.confirmPasswordReset = async function() {
+    const newPassword = document.getElementById('new_password').value;
+    const newPasswordConfirm = document.getElementById('new_password_confirm').value;
+
+    if (!newPassword) {
+        alert('⚠️ Preencha a nova password');
+        return;
+    }
+
+    if (newPassword.length < 3) {
+        alert('⚠️ Password deve ter pelo menos 3 caracteres');
+        return;
+    }
+
+    if (newPassword !== newPasswordConfirm) {
+        alert('⚠️ As passwords não coincidem');
+        return;
+    }
+
+    // Get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('reset_token');
+
+    if (!resetToken) {
+        alert('❌ Token de reset não encontrado no URL');
+        return;
+    }
+
+    setStatus('🔐 A alterar password...', 'info');
+    logLine('A confirmar reset de password...');
+
+    try {
+        const response = await fetch('/auth/password-reset/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: resetToken,
+                new_password: newPassword
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            logLine('✅ ' + data.message);
+
+            // Clear form
+            document.getElementById('new_password').value = '';
+            document.getElementById('new_password_confirm').value = '';
+
+            alert('✅ ' + data.message);
+
+            // Remove token from URL and reload
+            window.location.href = window.location.pathname;
+
+        } else {
+            setStatus('❌ ' + data.message, 'error');
+            logLine('❌ ' + data.message);
+            alert('❌ ' + data.message);
+        }
+
+    } catch (e) {
+        setStatus('❌ Erro ao alterar password: ' + e.message, 'error');
+        logLine('❌ Erro: ' + e.message);
+        alert('❌ Erro ao alterar password:\n\n' + e.message);
+    }
+};
+
+// Check if URL has reset_token on page load
+window.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetToken = urlParams.get('reset_token');
+
+    if (resetToken) {
+        console.log('[PASSWORD-RESET] Reset token detected in URL');
+        logLine('🔐 Link de recuperação de password detectado');
+
+        // Validate token first
+        fetch('/auth/check-reset-token?token=' + encodeURIComponent(resetToken))
+            .then(response => response.json())
+            .then(data => {
+                if (data.valid) {
+                    console.log('[PASSWORD-RESET] Token is valid for user:', data.username);
+                    logLine('✅ Link válido. Username: ' + data.username);
+
+                    // Hide all auth forms
+                    document.getElementById('login-form').style.display = 'none';
+                    document.getElementById('register-form').style.display = 'none';
+                    document.getElementById('password-reset-form').style.display = 'none';
+
+                    // Show new password form
+                    document.getElementById('new-password-form').style.display = 'block';
+
+                    // Show login overlay
+                    document.getElementById('login-overlay').style.display = 'flex';
+
+                    setStatus('🔐 Crie uma nova password', 'info');
+                } else {
+                    console.log('[PASSWORD-RESET] Token is invalid:', data.reason);
+                    logLine('❌ Link inválido: ' + data.reason);
+                    alert('❌ Link de recuperação inválido ou expirado.\n\nSolicite um novo link.');
+
+                    // Remove token from URL
+                    window.location.href = window.location.pathname;
+                }
+            })
+            .catch(error => {
+                console.error('[PASSWORD-RESET] Error validating token:', error);
+                logLine('❌ Erro ao validar link de recuperação');
+                alert('❌ Erro ao validar link de recuperação');
+            });
+    }
+});
+
 window.loginDev = async function() {
     try {
         document.getElementById('login_user').value = 'dev';
@@ -1455,6 +1660,456 @@ window.loginDev = async function() {
     } catch (e) {
         logLine('Login dev/dev error: ' + (e && e.message ? e.message : e));
         setStatus('❌ Erro login dev/dev: ' + (e && e.message ? e.message : e), 'error');
+    }
+};
+
+// ============================================================================
+// HELP WIDGET FUNCTIONS
+// ============================================================================
+
+/**
+ * Toggle help widget panel visibility
+ */
+window.toggleHelpWidget = function() {
+    const panel = document.getElementById('help-widget-panel');
+    if (panel) {
+        panel.classList.toggle('open');
+
+        // Clear search when closing
+        if (!panel.classList.contains('open')) {
+            const searchInput = document.getElementById('help-search');
+            if (searchInput) {
+                searchInput.value = '';
+                filterHelpItems();
+            }
+        }
+    }
+};
+
+/**
+ * Toggle individual help item (expand/collapse)
+ */
+window.toggleHelpItem = function(element) {
+    element.classList.toggle('expanded');
+};
+
+/**
+ * Filter help items based on search input
+ */
+window.filterHelpItems = function() {
+    const searchInput = document.getElementById('help-search');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const helpItems = document.querySelectorAll('.help-item');
+    const helpSections = document.querySelectorAll('.help-section');
+
+    if (!searchTerm) {
+        // Show all items and sections
+        helpItems.forEach(item => {
+            item.style.display = 'block';
+            item.classList.remove('expanded');
+        });
+        helpSections.forEach(section => {
+            section.style.display = 'block';
+        });
+        return;
+    }
+
+    // Track which sections have visible items
+    const sectionsWithResults = new Set();
+
+    helpItems.forEach(item => {
+        const question = item.querySelector('.help-item-question');
+        const answer = item.querySelector('.help-item-answer');
+
+        if (!question || !answer) return;
+
+        const questionText = question.textContent.toLowerCase();
+        const answerText = answer.textContent.toLowerCase();
+
+        if (questionText.includes(searchTerm) || answerText.includes(searchTerm)) {
+            item.style.display = 'block';
+            item.classList.add('expanded'); // Auto-expand matching items
+
+            // Mark parent section as having results
+            const parentSection = item.closest('.help-section');
+            if (parentSection) {
+                sectionsWithResults.add(parentSection);
+            }
+        } else {
+            item.style.display = 'none';
+            item.classList.remove('expanded');
+        }
+    });
+
+    // Show/hide sections based on whether they have visible items
+    helpSections.forEach(section => {
+        if (sectionsWithResults.has(section)) {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+};
+
+// ============================================================================
+// USER PROFILE FUNCTIONS
+// ============================================================================
+
+/**
+ * Show profile modal and load current user data
+ */
+window.showProfileModal = async function() {
+    const overlay = document.getElementById('profile-overlay');
+    if (!overlay) {
+        console.error('[PROFILE] Overlay element not found');
+        return;
+    }
+
+    // Check if user is logged in
+    if (!window.state || !window.state.token) {
+        console.error('[PROFILE] No token found in state');
+        alert('❌ Sessão expirada. Por favor, faça login novamente.');
+        logout();
+        return;
+    }
+
+    console.log('[PROFILE] Opening modal, token length:', window.state.token.length);
+
+    // Show modal
+    overlay.style.display = 'flex';
+
+    // Load profile data
+    try {
+        const response = await fetch('/auth/profile', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + window.state.token
+            }
+        });
+
+        console.log('[PROFILE] Response status:', response.status);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMsg = errorData.detail || errorData.message || `HTTP ${response.status}`;
+            console.error('[PROFILE] Request failed:', errorMsg);
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        console.log('[PROFILE] Profile data received:', { username: data.username, hasEmail: !!data.email });
+
+        // Fill form
+        document.getElementById('profile-username').value = data.username || '';
+        document.getElementById('profile-email').value = data.email || '';
+
+        logLine('📋 Perfil carregado: ' + data.username);
+    } catch (e) {
+        console.error('[PROFILE] Error loading profile:', e);
+        alert('❌ Erro ao carregar perfil:\n\n' + e.message);
+        // Close modal on error
+        overlay.style.display = 'none';
+    }
+};
+
+/**
+ * Close profile modal
+ */
+window.closeProfileModal = function() {
+    const overlay = document.getElementById('profile-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+};
+
+/**
+ * Update user email
+ */
+window.updateProfileEmail = async function() {
+    const email = document.getElementById('profile-email').value.trim();
+
+    // Validate email
+    if (email && !email.includes('@')) {
+        alert('⚠️ Email inválido. Deve conter @');
+        return;
+    }
+
+    setStatus('💾 A guardar email...', 'info');
+    logLine('Atualizando email: ' + email);
+
+    try {
+        const response = await fetch('/auth/profile/email?email=' + encodeURIComponent(email), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + state.token
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ Email atualizado com sucesso');
+            closeProfileModal();
+        } else {
+            const errorMsg = data.detail || data.message || 'Erro desconhecido';
+            setStatus('❌ ' + errorMsg, 'error');
+            alert('❌ ' + errorMsg);
+            logLine('❌ Erro ao atualizar email: ' + errorMsg);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao atualizar email: ' + e.message, 'error');
+        alert('❌ Erro ao atualizar email:\n\n' + e.message);
+        logLine('❌ Erro: ' + e.message);
+    }
+};
+
+/**
+ * Change password from profile modal
+ */
+window.changePasswordFromProfile = async function() {
+    const currentPassword = document.getElementById('profile-current-password').value;
+    const newPassword = document.getElementById('profile-new-password').value;
+    const newPasswordConfirm = document.getElementById('profile-new-password-confirm').value;
+
+    // Validate fields
+    if (!currentPassword) {
+        alert('⚠️ Preencha a password atual');
+        return;
+    }
+
+    if (!newPassword) {
+        alert('⚠️ Preencha a nova password');
+        return;
+    }
+
+    if (newPassword.length < 3) {
+        alert('⚠️ Nova password deve ter pelo menos 3 caracteres');
+        return;
+    }
+
+    if (newPassword !== newPasswordConfirm) {
+        alert('⚠️ As passwords não coincidem');
+        return;
+    }
+
+    if (currentPassword === newPassword) {
+        alert('⚠️ A nova password deve ser diferente da atual');
+        return;
+    }
+
+    setStatus('🔑 A alterar password...', 'info');
+    logLine('Alterando password...');
+
+    try {
+        const params = new URLSearchParams({
+            current_password: currentPassword,
+            new_password: newPassword
+        });
+
+        const response = await fetch('/auth/profile/change-password?' + params.toString(), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + state.token
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ Password alterada com sucesso');
+
+            // Clear password fields
+            document.getElementById('profile-current-password').value = '';
+            document.getElementById('profile-new-password').value = '';
+            document.getElementById('profile-new-password-confirm').value = '';
+
+            closeProfileModal();
+        } else {
+            const errorMsg = data.detail || data.message || 'Erro desconhecido';
+            setStatus('❌ ' + errorMsg, 'error');
+            alert('❌ ' + errorMsg);
+            logLine('❌ Erro ao alterar password: ' + errorMsg);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao alterar password: ' + e.message, 'error');
+        alert('❌ Erro ao alterar password:\n\n' + e.message);
+        logLine('❌ Erro: ' + e.message);
+    }
+};
+
+// ============================================================================
+// SMTP CONFIGURATION FUNCTIONS (Sysadmin only)
+// ============================================================================
+
+window.loadSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    setStatus('🔄 A carregar configuração SMTP...', 'info');
+
+    try {
+        const response = await fetch('/admin/smtp/config', {
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Erro ao carregar configuração');
+        }
+
+        const config = await response.json();
+
+        document.getElementById('smtp-host').value = config.smtp_host || '';
+        document.getElementById('smtp-port').value = config.smtp_port || 587;
+        document.getElementById('smtp-user').value = config.smtp_user || '';
+        document.getElementById('smtp-password').value = config.smtp_password === '***' ? '' : config.smtp_password;
+        document.getElementById('smtp-from-email').value = config.from_email || '';
+        document.getElementById('smtp-from-name').value = config.from_name || '';
+        document.getElementById('smtp-app-url').value = config.app_url || '';
+
+        document.getElementById('smtp-source-text').textContent = config.source === 'database' ? 'Base de Dados' : 'Variáveis de Ambiente';
+        document.getElementById('smtp-config-source').style.display = 'block';
+
+        setStatus('✅ Configuração SMTP carregada', 'success');
+        logLine('SMTP config loaded from: ' + config.source);
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ ' + e.message);
+    }
+};
+
+window.saveSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    const smtpHost = document.getElementById('smtp-host').value.trim();
+    const smtpPort = parseInt(document.getElementById('smtp-port').value);
+    const smtpUser = document.getElementById('smtp-user').value.trim();
+    const smtpPassword = document.getElementById('smtp-password').value;
+    const fromEmail = document.getElementById('smtp-from-email').value.trim();
+    const fromName = document.getElementById('smtp-from-name').value.trim();
+    const appUrl = document.getElementById('smtp-app-url').value.trim();
+
+    if (!smtpHost || !smtpUser || !smtpPassword || !fromEmail || !appUrl) {
+        alert('⚠️ Preencha todos os campos obrigatórios (incluindo URL da Aplicação)');
+        return;
+    }
+
+    if (!appUrl.startsWith('http://') && !appUrl.startsWith('https://')) {
+        alert('⚠️ URL da Aplicação deve começar com http:// ou https://');
+        return;
+    }
+
+    setStatus('💾 A guardar configuração SMTP...', 'info');
+
+    try {
+        const params = new URLSearchParams({
+            smtp_host: smtpHost,
+            smtp_port: smtpPort,
+            smtp_user: smtpUser,
+            smtp_password: smtpPassword,
+            from_email: fromEmail,
+            from_name: fromName,
+            app_url: appUrl
+        });
+
+        const response = await fetch('/admin/smtp/config?' + params.toString(), {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ SMTP config saved');
+            loadSmtpConfig(); // Reload to show updated source
+        } else {
+            throw new Error(data.detail || data.message || 'Erro desconhecido');
+        }
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ Erro ao guardar: ' + e.message);
+    }
+};
+
+window.deleteSmtpConfig = async function() {
+    if (!confirm('⚠️ Eliminar configuração SMTP da base de dados?\n\nO sistema voltará a usar variáveis de ambiente.')) {
+        return;
+    }
+
+    setStatus('🗑️ A eliminar configuração SMTP...', 'info');
+
+    try {
+        const response = await fetch('/admin/smtp/config', {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('SMTP config deleted, reverted to env vars');
+            loadSmtpConfig(); // Reload to show env var config
+        } else {
+            throw new Error(data.detail || data.message || 'Erro desconhecido');
+        }
+    } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+        alert('❌ Erro ao eliminar: ' + e.message);
+    }
+};
+
+window.testSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    const testEmail = document.getElementById('smtp-test-email').value.trim();
+
+    if (!testEmail || !testEmail.includes('@')) {
+        alert('⚠️ Preencha um email válido para teste');
+        return;
+    }
+
+    setStatus('📧 A enviar email de teste...', 'info');
+    logLine('Sending test email to: ' + testEmail);
+
+    try {
+        const params = new URLSearchParams({ test_email: testEmail });
+
+        const response = await fetch('/admin/smtp/test?' + params.toString(), {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus(data.message, 'success');
+            alert(data.message);
+            logLine('✅ Test email sent successfully');
+        } else {
+            setStatus(data.message, 'error');
+            alert(data.message);
+            logLine('❌ Test email failed: ' + data.message);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao enviar email de teste: ' + e.message, 'error');
+        alert('❌ Erro ao enviar email de teste:\n\n' + e.message);
+        logLine('❌ Error: ' + e.message);
     }
 };
 
