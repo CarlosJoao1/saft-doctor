@@ -695,25 +695,34 @@ window.updateNavbar = function() {
     const logoutBtn = document.getElementById('btn-logout');
     const profileBtn = document.getElementById('btn-profile');
     const adminTab = document.getElementById('admin-tab');
+    const adminTabLi = document.getElementById('admin-tab-li');
     const overlay = document.getElementById('login-overlay');
 
     if (window.state.token) {
         if (usernameEl) usernameEl.textContent = window.state.username || 'Utilizador';
         if (logoutBtn) logoutBtn.style.display = 'block';
         if (profileBtn) profileBtn.style.display = 'block';
-        if (overlay) overlay.classList.add('hidden');
+
+        // Hide login overlay
+        if (overlay) overlay.style.display = 'none';
 
         // Show Admin tab only for sysadmin
         if (adminTab) {
             adminTab.style.display = (window.state.role === 'sysadmin') ? 'inline-block' : 'none';
             console.log('[DEBUG] updateNavbar: Admin tab visible:', window.state.role === 'sysadmin');
         }
+        if (adminTabLi) {
+            adminTabLi.style.display = (window.state.role === 'sysadmin') ? 'block' : 'none';
+        }
     } else {
         if (usernameEl) usernameEl.textContent = 'Não autenticado';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (profileBtn) profileBtn.style.display = 'none';
         if (adminTab) adminTab.style.display = 'none';
-        if (overlay) overlay.classList.remove('hidden');
+        if (adminTabLi) adminTabLi.style.display = 'none';
+
+        // Show login overlay
+        if (overlay) overlay.style.display = 'flex';
     }
 };
 
