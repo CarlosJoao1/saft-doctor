@@ -443,18 +443,130 @@ async def delete_smtp_config(current=Depends(require_sysadmin), db=Depends(get_d
         raise HTTPException(status_code=500, detail='Erro ao eliminar configuração SMTP')
 
 
+@app.post('/admin/smtp/test', tags=['Admin'])
+async def test_smtp_config(test_email: str, current=Depends(require_sysadmin), db=Depends(get_db)):
+    """Test SMTP configuration by sending a test email"""
+    from core.email_service import EmailService
+
+    country = current.get('country', 'pt')
+    smtp_repo = SMTPConfigRepo(db, country)
+
+    try:
+        # Load SMTP config from DB or env vars
+        smtp_config = await smtp_repo.get_config()
+        email_service = EmailService(smtp_config)
+
+        if not email_service.is_configured():
+            return {
+                'ok': False,
+                'message': 'SMTP não configurado. Configure primeiro as credenciais SMTP.'
+            }
+
+        # Send test email
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        import smtplib
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'SAFT Doctor - Teste de Configuração SMTP'
+        msg['From'] = f'{email_service.from_name} <{email_service.from_email}>'
+        msg['To'] = test_email
+
+        text_body = f"""
+        SAFT Doctor - Teste de Email
+
+        Esta é uma mensagem de teste para verificar a configuração SMTP.
+
+        Configuração atual:
+        - SMTP Host: {email_service.smtp_host}
+        - SMTP Port: {email_service.smtp_port}
+        - From: {email_service.from_email}
+
+        Se recebeu este email, a configuração está a funcionar corretamente!
+
+        ---
+        SAFT Doctor
+        {email_service.app_url}
+        """
+
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #2563eb;">✅ SAFT Doctor - Teste de Email</h2>
+                <p>Esta é uma mensagem de teste para verificar a configuração SMTP.</p>
+
+                <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0;">
+                    <h3 style="margin-top: 0;">Configuração atual:</h3>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>SMTP Host:</strong> {email_service.smtp_host}</li>
+                        <li><strong>SMTP Port:</strong> {email_service.smtp_port}</li>
+                        <li><strong>From:</strong> {email_service.from_email}</li>
+                    </ul>
+                </div>
+
+                <p style="color: #10b981; font-weight: bold;">
+                    Se recebeu este email, a configuração está a funcionar corretamente! 🎉
+                </p>
+
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+                <p style="color: #64748b; font-size: 0.875rem;">
+                    SAFT Doctor<br>
+                    <a href="{email_service.app_url}" style="color: #2563eb;">{email_service.app_url}</a>
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+        with smtplib.SMTP(email_service.smtp_host, email_service.smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_service.smtp_user, email_service.smtp_password)
+            server.send_message(msg)
+
+        logger.info(f"✅ Test email sent successfully to {test_email} by {current['username']}")
+
+        return {
+            'ok': True,
+            'message': f'✅ Email de teste enviado para {test_email}. Verifique a sua caixa de entrada!'
+        }
+
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP Authentication failed: {e}")
+        return {
+            'ok': False,
+            'message': f'❌ Erro de autenticação SMTP. Verifique username e password.'
+        }
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error: {e}")
+        return {
+            'ok': False,
+            'message': f'❌ Erro SMTP: {str(e)}'
+        }
+    except Exception as e:
+        logger.error(f"Error testing SMTP: {e}", exc_info=True)
+        return {
+            'ok': False,
+            'message': f'❌ Erro ao enviar email de teste: {str(e)}'
+        }
+
+
 # Password Reset Endpoints
 from core.models import PasswordResetRequestIn, PasswordResetRequestOut, PasswordResetConfirmIn, PasswordResetConfirmOut
 from core.password_reset_repo import PasswordResetRepo
-from core.email_service import get_email_service
 
 @app.post('/auth/password-reset/request', tags=['Authentication'], response_model=PasswordResetRequestOut)
 async def request_password_reset(data: PasswordResetRequestIn, request: Request, db=Depends(get_db)):
     """Request password reset - sends email with reset token"""
+    from core.email_service import EmailService
+
     country = country_from_request(request)
     repo = UsersRepo(db, country)
     reset_repo = PasswordResetRepo(db)
-    email_service = get_email_service()
+    smtp_repo = SMTPConfigRepo(db, country)
 
     try:
         user = await repo.get(data.username)
@@ -466,6 +578,10 @@ async def request_password_reset(data: PasswordResetRequestIn, request: Request,
             return PasswordResetRequestOut(ok=False, message="Este utilizador não tem email configurado. Por favor, faça login e adicione um email no seu Perfil (botão ⚙️ Perfil na barra superior).")
 
         reset_token = await reset_repo.create_reset_token(data.username, user_email)
+
+        # Load SMTP config from DB or use env vars
+        smtp_config = await smtp_repo.get_config()
+        email_service = EmailService(smtp_config)
 
         if email_service.is_configured():
             email_sent = email_service.send_password_reset_email(to_email=user_email, username=data.username, reset_token=reset_token)

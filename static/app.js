@@ -1990,6 +1990,48 @@ window.deleteSmtpConfig = async function() {
     }
 };
 
+window.testSmtpConfig = async function() {
+    if (!state.token) {
+        alert('❌ Faça login primeiro');
+        return;
+    }
+
+    const testEmail = document.getElementById('smtp-test-email').value.trim();
+
+    if (!testEmail || !testEmail.includes('@')) {
+        alert('⚠️ Preencha um email válido para teste');
+        return;
+    }
+
+    setStatus('📧 A enviar email de teste...', 'info');
+    logLine('Sending test email to: ' + testEmail);
+
+    try {
+        const params = new URLSearchParams({ test_email: testEmail });
+
+        const response = await fetch('/admin/smtp/test?' + params.toString(), {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus(data.message, 'success');
+            alert(data.message);
+            logLine('✅ Test email sent successfully');
+        } else {
+            setStatus(data.message, 'error');
+            alert(data.message);
+            logLine('❌ Test email failed: ' + data.message);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao enviar email de teste: ' + e.message, 'error');
+        alert('❌ Erro ao enviar email de teste:\n\n' + e.message);
+        logLine('❌ Error: ' + e.message);
+    }
+};
+
 window.onFileChange = function(ev) {
     state.file = ev.target.files[0] || null;
     if (state.file) {

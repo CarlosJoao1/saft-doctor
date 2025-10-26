@@ -502,7 +502,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=48"></script>
+    <script src="/static/app.js?v=49"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -1134,6 +1134,18 @@
 
                 <div id="smtp-config-source" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); display: none;">
                     <strong>Origem:</strong> <span id="smtp-source-text">-</span>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;">✉️ Testar Configuração SMTP</h4>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                        Envie um email de teste para verificar se a configuração está a funcionar.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label" for="smtp-test-email">Email de Teste</label>
+                        <input type="email" id="smtp-test-email" placeholder="seu@email.com" />
+                    </div>
+                    <button class="btn" onclick="testSmtpConfig()" style="background: var(--success);">📧 Enviar Email de Teste</button>
                 </div>
             </div>
         </div>
