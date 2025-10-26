@@ -1922,8 +1922,13 @@ window.saveSmtpConfig = async function() {
     const fromName = document.getElementById('smtp-from-name').value.trim();
     const appUrl = document.getElementById('smtp-app-url').value.trim();
 
-    if (!smtpHost || !smtpUser || !smtpPassword || !fromEmail) {
-        alert('⚠️ Preencha todos os campos obrigatórios');
+    if (!smtpHost || !smtpUser || !smtpPassword || !fromEmail || !appUrl) {
+        alert('⚠️ Preencha todos os campos obrigatórios (incluindo URL da Aplicação)');
+        return;
+    }
+
+    if (!appUrl.startsWith('http://') && !appUrl.startsWith('https://')) {
+        alert('⚠️ URL da Aplicação deve começar com http:// ou https://');
         return;
     }
 

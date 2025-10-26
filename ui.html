@@ -502,7 +502,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=49"></script>
+    <script src="/static/app.js?v=50"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -1122,8 +1122,11 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="smtp-app-url">App URL</label>
-                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" />
+                    <label class="form-label" for="smtp-app-url">URL da Aplicação ⚠️ (Obrigatório para links de reset)</label>
+                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
+                    <small style="color: var(--text-secondary);">
+                        URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)
+                    </small>
                 </div>
 
                 <div class="btn-group" style="margin-top: 1.5rem;">
