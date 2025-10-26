@@ -337,6 +337,46 @@ async def update_profile_email(email: str, current=Depends(get_current_user), db
         raise HTTPException(status_code=500, detail='Erro ao atualizar email')
 
 
+@app.post('/auth/profile/change-password', tags=['Authentication'])
+async def change_password(current_password: str, new_password: str, current=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Change current user's password (requires current password for security)
+    """
+    username = current['username']
+    country = current.get('country', 'pt')
+    repo = UsersRepo(db, country)
+
+    try:
+        # Get user and verify current password
+        user = await repo.get(username)
+        if not user:
+            raise HTTPException(status_code=404, detail='Utilizador não encontrado')
+
+        # Verify current password
+        if not verify_password(current_password, user['password_hash']):
+            raise HTTPException(status_code=400, detail='Password atual incorreta')
+
+        # Validate new password
+        if len(new_password) < 3:
+            raise HTTPException(status_code=400, detail='Nova password deve ter pelo menos 3 caracteres')
+
+        # Update password
+        new_hash = hash_password(new_password)
+        await repo.update_password(username, new_hash)
+
+        logger.info(f"✅ Password changed for user {username}")
+
+        return {
+            'ok': True,
+            'message': 'Password alterada com sucesso'
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing password: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail='Erro ao alterar password')
+
+
 # SMTP Configuration Endpoints (Sysadmin only)
 from core.smtp_config_repo import SMTPConfigRepo
 

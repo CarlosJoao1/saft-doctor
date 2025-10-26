@@ -1865,6 +1865,82 @@ window.updateProfileEmail = async function() {
     }
 };
 
+/**
+ * Change password from profile modal
+ */
+window.changePasswordFromProfile = async function() {
+    const currentPassword = document.getElementById('profile-current-password').value;
+    const newPassword = document.getElementById('profile-new-password').value;
+    const newPasswordConfirm = document.getElementById('profile-new-password-confirm').value;
+
+    // Validate fields
+    if (!currentPassword) {
+        alert('⚠️ Preencha a password atual');
+        return;
+    }
+
+    if (!newPassword) {
+        alert('⚠️ Preencha a nova password');
+        return;
+    }
+
+    if (newPassword.length < 3) {
+        alert('⚠️ Nova password deve ter pelo menos 3 caracteres');
+        return;
+    }
+
+    if (newPassword !== newPasswordConfirm) {
+        alert('⚠️ As passwords não coincidem');
+        return;
+    }
+
+    if (currentPassword === newPassword) {
+        alert('⚠️ A nova password deve ser diferente da atual');
+        return;
+    }
+
+    setStatus('🔑 A alterar password...', 'info');
+    logLine('Alterando password...');
+
+    try {
+        const params = new URLSearchParams({
+            current_password: currentPassword,
+            new_password: newPassword
+        });
+
+        const response = await fetch('/auth/profile/change-password?' + params.toString(), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + state.token
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+            setStatus('✅ ' + data.message, 'success');
+            alert('✅ ' + data.message);
+            logLine('✅ Password alterada com sucesso');
+
+            // Clear password fields
+            document.getElementById('profile-current-password').value = '';
+            document.getElementById('profile-new-password').value = '';
+            document.getElementById('profile-new-password-confirm').value = '';
+
+            closeProfileModal();
+        } else {
+            const errorMsg = data.detail || data.message || 'Erro desconhecido';
+            setStatus('❌ ' + errorMsg, 'error');
+            alert('❌ ' + errorMsg);
+            logLine('❌ Erro ao alterar password: ' + errorMsg);
+        }
+    } catch (e) {
+        setStatus('❌ Erro ao alterar password: ' + e.message, 'error');
+        alert('❌ Erro ao alterar password:\n\n' + e.message);
+        logLine('❌ Erro: ' + e.message);
+    }
+};
+
 // ============================================================================
 // SMTP CONFIGURATION FUNCTIONS (Sysadmin only)
 // ============================================================================

@@ -502,7 +502,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=50"></script>
+    <script src="/static/app.js?v=51"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -1176,8 +1176,35 @@
                 </div>
             </div>
 
-            <div class="btn-group" style="margin-top: 1.5rem;">
+            <div class="btn-group" style="margin-top: 1rem;">
                 <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
+            </div>
+
+            <!-- Change Password Section -->
+            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">🔐 Alterar Password</h3>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-current-password">Password Atual</label>
+                    <input type="password" id="profile-current-password" placeholder="password atual" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password">Nova Password</label>
+                    <input type="password" id="profile-new-password" placeholder="nova password" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password-confirm">Confirmar Nova Password</label>
+                    <input type="password" id="profile-new-password-confirm" placeholder="confirme a nova password" />
+                </div>
+
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="changePasswordFromProfile()" style="background: var(--warning);">🔑 Alterar Password</button>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1.5rem;">
                 <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
             </div>
         </div>
