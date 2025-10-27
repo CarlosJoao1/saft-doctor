@@ -508,7 +508,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=59"></script>
+    <script src="/static/app.js?v=60"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -726,53 +726,61 @@
 
         <!-- TAB: Validação -->
         <div id="panel-app" class="tabpanel active">
-            <div class="card">
-                <h3>📤 Validar ficheiro SAFT</h3>
-                <div class="form-group">
-                    <label class="form-label">Escolha um ficheiro XML</label>
-                    <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-file-earmark-arrow-up me-2"></i>Validar ficheiro SAFT
+                    </h5>
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Workflow de validação</label>
-                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border-radius: 6px; font-size: 0.875rem; color: #0d47a1;">
-                        <strong>📋 Processo em 2 fases:</strong><br>
-                        1️⃣ <strong>Validar</strong>: Verifica sintaxe XML<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Com credenciais AT: output completo + estatísticas<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Sem credenciais: validação básica de sintaxe<br>
-                        2️⃣ <strong>Enviar</strong>: Submete à AT (requer credenciais obrigatórias)
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold" for="file">
+                            <i class="bi bi-file-earmark-code me-2"></i>Escolha um ficheiro XML
+                        </label>
+                        <input type="file" class="form-control" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
                     </div>
-                </div>
 
-                <!-- Fase 1: Validação -->
-                <div id="validation-phase">
-                    <div class="btn-group">
-                        <button class="btn" id="btn-jar" onclick="validateSmart()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                        <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                        <button class="btn btn-info" onclick="checkDocs()">
-                            <span>📄</span> Checkar os Docs
-                        </button>
-                        <button class="btn" onclick="presignUpload()">
-                            <span>☁️</span> Upload via Presign
-                        </button>
-                        <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                            <span>☁️</span> Validar do B2
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
-                            <span>👁️</span> Ver comando
-                        </button>
+                    <div class="alert alert-info mb-4">
+                        <h6 class="alert-heading">
+                            <i class="bi bi-info-circle me-2"></i>Processo em 2 fases
+                        </h6>
+                        <p class="mb-2"><strong>1️⃣ Validar:</strong> Verifica sintaxe XML</p>
+                        <ul class="mb-2 small">
+                            <li>Com credenciais AT: output completo + estatísticas</li>
+                            <li>Sem credenciais: validação básica de sintaxe</li>
+                        </ul>
+                        <p class="mb-0"><strong>2️⃣ Enviar:</strong> Submete à AT (requer credenciais obrigatórias)</p>
                     </div>
-                    <div style="margin-top: 0.75rem; padding: 0.6rem; background: var(--bg); border-radius: 8px; font-size: 0.9rem;">
-                        <span style="color: var(--text-secondary);">object_key:</span>
-                        <code id="object_key" class="code">(nenhum)</code>
-                        <span style="margin-left: 1rem; color: var(--text-secondary);">ficheiro:</span>
-                        <code id="object_key_name" class="code">(desconhecido)</code>
+
+                    <!-- Fase 1: Validação -->
+                    <div id="validation-phase">
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-primary" id="btn-jar" onclick="validateSmart()">
+                                <i class="bi bi-search me-2"></i>1. Validar Ficheiro
+                            </button>
+                            <button class="btn btn-outline-primary" id="btn-validate" onclick="validate()">
+                                <i class="bi bi-check-circle me-2"></i>Validação básica
+                            </button>
+                            <button class="btn btn-info" onclick="checkDocs()">
+                                <i class="bi bi-file-text me-2"></i>Checkar os Docs
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="presignUpload()">
+                                <i class="bi bi-cloud-upload me-2"></i>Upload via Presign
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
+                                <i class="bi bi-cloud-check me-2"></i>Validar do B2
+                            </button>
+                            <button class="btn btn-outline-dark" onclick="previewJarCommand('validar')">
+                                <i class="bi bi-eye me-2"></i>Ver comando
+                            </button>
+                        </div>
+                        <div class="alert alert-secondary py-2 small">
+                            <span class="text-muted">object_key:</span>
+                            <code id="object_key" class="text-primary">(nenhum)</code>
+                            <span class="text-muted ms-3">ficheiro:</span>
+                            <code id="object_key_name" class="text-primary">(desconhecido)</code>
+                        </div>
                     </div>
-                </div>
                     <div id="upload-progress" style="display:none; margin-top: 0.5rem;">
                         <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Upload:</div>
                         <div style="height: 8px; background: #e5e7eb; border-radius: 6px; overflow: hidden;">
