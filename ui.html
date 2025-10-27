@@ -507,7 +507,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=53"></script>
+    <script src="/static/app.js?v=54"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -784,28 +784,50 @@
             </div>
 
             <div class="card">
-                <div class="log-header">
-                    <h3>� Log de execução</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-terminal me-2"></i>Log de execução</h3>
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-ghost-secondary" onclick="clearLog()">
+                            <i class="ti ti-trash me-1"></i>Limpar log
+                        </button>
+                    </div>
                 </div>
-                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
+                <div class="card-body p-0">
+                    <pre id="log" class="m-0 p-3" style="min-height: 160px; font-family: 'Courier New', monospace; font-size: 0.875rem; background: #f8f9fa;" aria-label="Log de execução">(log vazio)</pre>
+                </div>
             </div>
 
             <div class="card">
-                <div class="log-header">
-                    <h3>� Resultado</h3>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-file-analytics me-2"></i>Resultado</h3>
                 </div>
-                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
+                <div class="card-body p-0">
+                    <pre id="out" class="m-0 p-3" style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 0.875rem; background: #f8f9fa;">(aguardando validação...)</pre>
+                </div>
             </div>
 
             <div class="card">
-                <h3>🔧 Diagnóstico</h3>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
-                    <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
-                    <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
-                    <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
-                    <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-tool me-2"></i>Diagnóstico</h3>
+                </div>
+                <div class="card-body">
+                    <div class="btn-list">
+                        <button class="btn btn-outline-secondary" onclick="checkJavaVersion()">
+                            <i class="ti ti-brand-java me-1"></i>Java version
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="checkJarStatus()">
+                            <i class="ti ti-file-zip me-1"></i>Check JAR
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="runJarCheck()">
+                            <i class="ti ti-play me-1"></i>Run JAR check
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="diagConnections()">
+                            <i class="ti ti-activity me-1"></i>Diag (/diag)
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">
+                            <i class="ti ti-test-pipe me-1"></i>Testar Popup
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -813,43 +835,50 @@
         <!-- TAB: Documentos -->
         <div id="panel-docs" class="tabpanel">
             <div class="card">
-                <div class="log-header">
-                    <h3>📋 Documentos no Ficheiro SAFT</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToCSV()">📥 Exportar CSV</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToExcel()">📊 Exportar Excel</button>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-file-text me-2"></i>Documentos no Ficheiro SAFT</h3>
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-primary" onclick="exportDocsToCSV()">
+                            <i class="ti ti-download me-1"></i>Exportar CSV
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportDocsToExcel()">
+                            <i class="ti ti-file-spreadsheet me-1"></i>Exportar Excel
+                        </button>
                     </div>
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
-                </p>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
+                    </p>
 
-                <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="form-group">
-                        <label class="form-label">Pesquisar</label>
-                        <input type="text" id="docs-search" placeholder="Número, Cliente, Valor..."
-                               oninput="filterDocsTable()"
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Tipo Documento</label>
-                        <select id="docs-filter-type" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
-                            <option value="">Todos</option>
-                            <option value="FT">Fatura (FT)</option>
-                            <option value="NC">Nota Crédito (NC)</option>
-                            <option value="ND">Nota Débito (ND)</option>
-                            <option value="FR">Fatura Recibo (FR)</option>
-                            <option value="GT">Guia Transporte (GT)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <select id="docs-filter-status" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
-                            <option value="">Todos</option>
-                            <option value="N">Normal (N)</option>
+                    <!-- Filtros -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label" for="docs-search">
+                                <i class="ti ti-search me-1"></i>Pesquisar
+                            </label>
+                            <input type="text" class="form-control" id="docs-search" placeholder="Número, Cliente, Valor..." oninput="filterDocsTable()" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="docs-filter-type">
+                                <i class="ti ti-file-invoice me-1"></i>Tipo Documento
+                            </label>
+                            <select class="form-select" id="docs-filter-type" onchange="filterDocsTable()">
+                                <option value="">Todos</option>
+                                <option value="FT">Fatura (FT)</option>
+                                <option value="NC">Nota Crédito (NC)</option>
+                                <option value="ND">Nota Débito (ND)</option>
+                                <option value="FR">Fatura Recibo (FR)</option>
+                                <option value="GT">Guia Transporte (GT)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="docs-filter-status">
+                                <i class="ti ti-check me-1"></i>Status
+                            </label>
+                            <select class="form-select" id="docs-filter-status" onchange="filterDocsTable()">
+                                <option value="">Todos</option>
+                                <option value="N">Normal (N)</option>
                             <option value="A">Anulado (A)</option>
                         </select>
                     </div>
@@ -1005,13 +1034,17 @@
         <!-- TAB: Credenciais -->
         <div id="panel-creds" class="tabpanel">
             <div class="card">
-                <h3>🔐 Gestão de credenciais AT</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
-                </p>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="loadCredsStatus()">🔄 Atualizar estado</button>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-key me-2"></i>Gestão de credenciais AT</h3>
                 </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="ti ti-info-circle me-2"></i>
+                        As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
+                    </div>
+                    <button class="btn btn-outline-secondary mb-3" onclick="loadCredsStatus()">
+                        <i class="ti ti-refresh me-1"></i>Atualizar estado
+                    </button>
                 <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
                     <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
                         <div>
