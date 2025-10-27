@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SAFT Doctor • Validador</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-
-    <!-- Tabler CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -278,7 +273,7 @@
         }
         pre {
             background: #1e293b;
-            color: #e2e8f0;
+            color: #ffffff;
             padding: 1rem;
             border-radius: 8px;
             overflow-x: auto;
@@ -507,279 +502,187 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=56"></script>
+    <script src="/static/app.js?v=57"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
-    <header class="navbar navbar-expand-md navbar-dark sticky-top" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">
-                <i class="ti ti-file-check me-2"></i>
-                <strong>SAFT Doctor</strong>
-            </a>
-            <div class="navbar-nav flex-row order-md-last">
-                <div class="nav-item d-none d-md-flex me-3">
-                    <div class="d-flex align-items-center text-white-50">
-                        <i class="ti ti-user me-2"></i>
-                        <span id="navbar-username">Não autenticado</span>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-outline-light me-2" id="btn-profile" onclick="showProfileModal()" style="display: none;">
-                    <i class="ti ti-settings me-1"></i> Perfil
-                </button>
-                <button class="btn btn-sm btn-outline-light" id="btn-logout" onclick="logout()" style="display: none;">
-                    <i class="ti ti-logout me-1"></i> Sair
-                </button>
-            </div>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            🩺 SAFT Doctor
         </div>
-    </header>
+        <div class="navbar-user">
+            <div class="user-info">
+                <span>👤</span>
+                <span id="navbar-username">Não autenticado</span>
+            </div>
+            <button class="btn-logout" onclick="showProfileModal()" id="btn-profile" style="display: none; margin-right: 0.5rem;">
+                ⚙️ Perfil
+            </button>
+            <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
+                Sair
+            </button>
+        </div>
+    </nav>
 
     <!-- Login overlay (aparece quando não está autenticado) -->
-    <div class="modal modal-blur fade show" id="login-overlay" style="display: flex; background: rgba(32, 43, 61, 0.85);" tabindex="-1" role="dialog" aria-modal="true">
-        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
-            <div class="modal-content" style="background: white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
-                <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white;">
-                    <h5 class="modal-title">
-                        <i class="ti ti-lock me-2"></i>Autenticação
-                    </h5>
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-card">
+            <h2 style="margin-bottom: 1.5rem;">🔐 Autenticação</h2>
+
+            <!-- Tabs para Login / Registar -->
+            <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn" id="login-tab-btn" onclick="showAuthTab('login')" style="flex: 1;">🔓 Login</button>
+                <button class="btn" id="register-tab-btn" onclick="showAuthTab('register')" style="flex: 1; background: var(--text-secondary);">✍️ Registar</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="login-form" style="display: block;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="login_user" placeholder="dev" value="dev" />
                 </div>
-                <div class="modal-body">
-                    <!-- Tabs para Login / Registar -->
-                    <ul class="nav nav-tabs mb-3" data-bs-toggle="tabs">
-                        <li class="nav-item">
-                            <a href="#tabs-login" class="nav-link active" id="login-tab-btn" onclick="showAuthTab('login')">
-                                <i class="ti ti-login me-1"></i>Login
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#tabs-register" class="nav-link" id="register-tab-btn" onclick="showAuthTab('register')">
-                                <i class="ti ti-user-plus me-1"></i>Registar
-                            </a>
-                        </li>
-                    </ul>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="login_pass" placeholder="dev" value="dev" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="doLogin()">🔓 Entrar</button>
+                </div>
+                <div style="margin-top: 1rem; text-align: center;">
+                    <button type="button" onclick="showAuthTab('password-reset')" style="background: none; border: none; font-size: 0.875rem; color: var(--primary); text-decoration: underline; cursor: pointer; padding: 0;">
+                        Esqueceu a password?
+                    </button>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Utilize <strong>dev/dev</strong> para acesso rápido
+                </div>
+            </div>
 
-                    <!-- Login Form -->
-                    <div id="login-form" style="display: block;">
-                        <div class="mb-3">
-                            <label class="form-label required" for="login_user">
-                                <i class="ti ti-user me-1"></i>Username
-                            </label>
-                            <input type="text" class="form-control" id="login_user" placeholder="dev" value="dev" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label required" for="login_pass">
-                                <i class="ti ti-key me-1"></i>Password
-                            </label>
-                            <input type="password" class="form-control" id="login_pass" placeholder="dev" value="dev" />
-                        </div>
-                        <button class="btn btn-primary w-100" onclick="doLogin()">
-                            <i class="ti ti-login me-1"></i>Entrar
-                        </button>
-                        <div class="text-center mt-3">
-                            <a href="javascript:void(0)" onclick="showAuthTab('password-reset')" class="link-secondary">
-                                <i class="ti ti-help me-1"></i>Esqueceu a password?
-                            </a>
-                        </div>
-                        <div class="alert alert-info mt-3 mb-0 small">
-                            <i class="ti ti-info-circle me-1"></i>
-                            Utilize <strong>dev/dev</strong> para acesso rápido
-                        </div>
+            <!-- Register Form -->
+            <div id="register-form" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="register_user" placeholder="username" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email (opcional)</label>
+                    <input type="email" id="register_email" placeholder="seu@email.com" />
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        Recomendado para recuperação de password
                     </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="register_pass" placeholder="password" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar Password</label>
+                    <input type="password" id="register_pass_confirm" placeholder="confirme a password" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="doRegister()">✍️ Criar Conta</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Após registar, faça login com as suas credenciais
+                </div>
+            </div>
 
-                    <!-- Register Form -->
-                    <div id="register-form" style="display: none;">
-                        <div class="mb-3">
-                            <label class="form-label required" for="register_user">
-                                <i class="ti ti-user me-1"></i>Username
-                            </label>
-                            <input type="text" class="form-control" id="register_user" placeholder="username" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="register_email">
-                                <i class="ti ti-mail me-1"></i>Email (opcional)
-                            </label>
-                            <input type="email" class="form-control" id="register_email" placeholder="seu@email.com" />
-                            <small class="form-hint">Recomendado para recuperação de password</small>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label required" for="register_pass">
-                                <i class="ti ti-key me-1"></i>Password
-                            </label>
-                            <input type="password" class="form-control" id="register_pass" placeholder="password" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label required" for="register_pass_confirm">
-                                <i class="ti ti-checks me-1"></i>Confirmar Password
-                            </label>
-                            <input type="password" class="form-control" id="register_pass_confirm" placeholder="confirme a password" />
-                        </div>
-                        <button class="btn btn-primary w-100" onclick="doRegister()">
-                            <i class="ti ti-user-plus me-1"></i>Criar Conta
-                        </button>
-                        <div class="text-center text-muted small mt-3">
-                            Após registar, faça login com as suas credenciais
-                        </div>
-                    </div>
+            <!-- Password Reset Request Form -->
+            <div id="password-reset-form" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="reset_username" placeholder="username" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="requestPasswordReset()">📧 Enviar Email</button>
+                    <button class="btn" onclick="showAuthTab('login')" style="background: var(--text-secondary);">Voltar</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Receberá um email com instruções para recuperar a password
+                </div>
+            </div>
 
-                    <!-- Password Reset Request Form -->
-                    <div id="password-reset-form" style="display: none;">
-                        <div class="mb-3">
-                            <label class="form-label required" for="reset_username">
-                                <i class="ti ti-user me-1"></i>Username
-                            </label>
-                            <input type="text" class="form-control" id="reset_username" placeholder="username" />
-                        </div>
-                        <div class="btn-list">
-                            <button class="btn btn-primary" onclick="requestPasswordReset()">
-                                <i class="ti ti-mail me-1"></i>Enviar Email
-                            </button>
-                            <button class="btn btn-secondary" onclick="showAuthTab('login')">
-                                <i class="ti ti-arrow-left me-1"></i>Voltar
-                            </button>
-                        </div>
-                        <div class="alert alert-info mt-3 mb-0 small">
-                            <i class="ti ti-info-circle me-1"></i>
-                            Receberá um email com instruções para recuperar a password
-                        </div>
-                    </div>
-
-                    <!-- New Password Form (shown when URL has reset_token) -->
-                    <div id="new-password-form" style="display: none;">
-                        <h4 class="text-primary mb-3">
-                            <i class="ti ti-lock-open me-2"></i>Criar Nova Password
-                        </h4>
-                        <div class="mb-3">
-                            <label class="form-label required" for="new_password">
-                                <i class="ti ti-key me-1"></i>Nova Password
-                            </label>
-                            <input type="password" class="form-control" id="new_password" placeholder="nova password" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label required" for="new_password_confirm">
-                                <i class="ti ti-checks me-1"></i>Confirmar Password
-                            </label>
-                            <input type="password" class="form-control" id="new_password_confirm" placeholder="confirme a nova password" />
-                        </div>
-                        <button class="btn btn-success w-100" onclick="confirmPasswordReset()">
-                            <i class="ti ti-check me-1"></i>Guardar Password
-                        </button>
-                        <div class="text-center text-muted small mt-3">
-                            Após guardar, poderá fazer login com a nova password
-                        </div>
-                    </div>
+            <!-- New Password Form (shown when URL has reset_token) -->
+            <div id="new-password-form" style="display: none;">
+                <h3 style="margin-bottom: 1rem; color: var(--primary);">Criar Nova Password</h3>
+                <div class="form-group">
+                    <label class="form-label">Nova Password</label>
+                    <input type="password" id="new_password" placeholder="nova password" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar Password</label>
+                    <input type="password" id="new_password_confirm" placeholder="confirme a nova password" />
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="confirmPasswordReset()">✅ Guardar Password</button>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Após guardar, poderá fazer login com a nova password
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="page">
-        <div class="page-wrapper">
-            <div class="page-header d-print-none">
-                <div class="container-xl">
-                    <div class="row g-2 align-items-center">
-                        <div class="col">
-                            <div class="page-pretitle">Sistema Profissional de Validação</div>
-                            <h2 class="page-title">
-                                <i class="ti ti-file-check me-2"></i>
-                                Validador SAFT-T (PT)
-                            </h2>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <div class="container" style="padding-bottom: 4rem;">
+        <div style="margin-bottom: 1rem;">
+            <h1>Validador profissional de ficheiros SAFT-T (PT)</h1>
+        </div>
 
-            <div class="page-body">
-                <div class="container-xl">
-                    <!-- Navigation Tabs -->
-                    <ul class="nav nav-tabs nav-tabs-lg mb-3" data-bs-toggle="tabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <a href="#tab-app" class="nav-link active" data-tab="app" onclick="showTab('app')" role="tab">
-                                <i class="ti ti-upload me-2"></i>Validação
-                            </a>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <a href="#tab-docs" class="nav-link" data-tab="docs" onclick="showTab('docs')" role="tab">
-                                <i class="ti ti-file-text me-2"></i>Documentos
-                            </a>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <a href="#tab-history" class="nav-link" data-tab="history" onclick="showTab('history')" role="tab">
-                                <i class="ti ti-history me-2"></i>Histórico
-                            </a>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <a href="#tab-creds" class="nav-link" data-tab="creds" onclick="showTab('creds')" role="tab">
-                                <i class="ti ti-key me-2"></i>Credenciais AT
-                            </a>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <a href="#tab-config" class="nav-link" data-tab="config" onclick="showTab('config')" role="tab">
-                                <i class="ti ti-settings me-2"></i>Configuração
-                            </a>
-                        </li>
-                        <li class="nav-item" role="presentation" id="admin-tab-li" style="display: none;">
-                            <a href="#tab-admin" class="nav-link" id="admin-tab" data-tab="admin" onclick="showTab('admin')" role="tab">
-                                <i class="ti ti-crown me-2"></i>Admin
-                            </a>
-                        </li>
-                    </ul>
+        <div class="tabs">
+            <button class="tab active" data-tab="app" onclick="showTab('app')">📄 Validação</button>
+            <button class="tab" data-tab="docs" onclick="showTab('docs')">📋 Documentos</button>
+            <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
+            <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
+            <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
+            <button class="tab" id="admin-tab" data-tab="admin" onclick="showTab('admin')" style="display: none;">👑 Admin</button>
+        </div>
 
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="hb" role="switch">
-                        <label class="form-check-label" for="hb">Auto-reload quando o backend reinicia (opcional)</label>
-                    </div>
+        <div class="checkbox-label" style="margin-bottom: 1.5rem;">
+            <input type="checkbox" id="hb" />
+            <span>Auto-reload quando o backend reinicia (opcional)</span>
+        </div>
 
         <!-- TAB: Validação -->
         <div id="panel-app" class="tabpanel active">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-upload me-2"></i>Validar ficheiro SAFT</h3>
+                <h3>📤 Validar ficheiro SAFT</h3>
+                <div class="form-group">
+                    <label class="form-label">Escolha um ficheiro XML</label>
+                    <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label required" for="file">Escolha um ficheiro XML</label>
-                        <input type="file" class="form-control" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
-                        <small class="form-hint">Formatos aceites: .xml (SAFT-T PT)</small>
+                
+                <div class="form-group">
+                    <label class="form-label">Workflow de validação</label>
+                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border-radius: 6px; font-size: 0.875rem; color: #0d47a1;">
+                        <strong>📋 Processo em 2 fases:</strong><br>
+                        1️⃣ <strong>Validar</strong>: Verifica sintaxe XML<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;• Com credenciais AT: output completo + estatísticas<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;• Sem credenciais: validação básica de sintaxe<br>
+                        2️⃣ <strong>Enviar</strong>: Submete à AT (requer credenciais obrigatórias)
                     </div>
+                </div>
 
-                    <div class="alert alert-info mb-3">
-                        <div class="d-flex">
-                            <div>
-                                <i class="ti ti-info-circle fs-2 me-3"></i>
-                            </div>
-                            <div>
-                                <h4 class="alert-title">Processo em 2 fases</h4>
-                                <div class="text-muted">
-                                    <strong>1. Validar:</strong> Verifica sintaxe XML<br>
-                                    • Com credenciais AT: output completo + estatísticas<br>
-                                    • Sem credenciais: validação básica de sintaxe<br>
-                                    <strong>2. Enviar:</strong> Submete à AT (requer credenciais obrigatórias)
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Fase 1: Validação -->
-                    <div id="validation-phase">
-                        <div class="btn-list">
-                            <button class="btn btn-primary" id="btn-jar" onclick="validateSmart()">
-                                <i class="ti ti-search me-1"></i> 1. Validar Ficheiro
-                            </button>
-                            <button class="btn btn-outline-primary" id="btn-validate" onclick="validate()">
-                                <i class="ti ti-check me-1"></i> Validação básica
-                            </button>
-                            <button class="btn btn-info" onclick="checkDocs()">
-                                <i class="ti ti-file-text me-1"></i> Checkar os Docs
-                            </button>
-                            <button class="btn btn-cyan" onclick="presignUpload()">
-                                <i class="ti ti-cloud-upload me-1"></i> Upload via Presign
-                            </button>
-                            <button class="btn btn-teal" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                                <i class="ti ti-cloud-check me-1"></i> Validar do B2
-                            </button>
-                            <button class="btn btn-ghost-secondary" onclick="previewJarCommand('validar')">
-                                <i class="ti ti-eye me-1"></i> Ver comando
-                            </button>
+                <!-- Fase 1: Validação -->
+                <div id="validation-phase">
+                    <div class="btn-group">
+                        <button class="btn" id="btn-jar" onclick="validateSmart()">
+                            <span>🔍</span> 1. Validar Ficheiro
+                        </button>
+                        <button class="btn" id="btn-validate" onclick="validate()">
+                            <span>✓</span> Validação básica
+                        </button>
+                        <button class="btn btn-info" onclick="checkDocs()">
+                            <span>📄</span> Checkar os Docs
+                        </button>
+                        <button class="btn" onclick="presignUpload()">
+                            <span>☁️</span> Upload via Presign
+                        </button>
+                        <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
+                            <span>☁️</span> Validar do B2
+                        </button>
+                        <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
+                            <span>👁️</span> Ver comando
+                        </button>
                     </div>
                     <div style="margin-top: 0.75rem; padding: 0.6rem; background: var(--bg); border-radius: 8px; font-size: 0.9rem;">
                         <span style="color: var(--text-secondary);">object_key:</span>
@@ -823,50 +726,28 @@
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-terminal me-2"></i>Log de execução</h3>
-                    <div class="card-actions">
-                        <button class="btn btn-sm btn-ghost-secondary" onclick="clearLog()">
-                            <i class="ti ti-trash me-1"></i>Limpar log
-                        </button>
-                    </div>
+                <div class="log-header">
+                    <h3>� Log de execução</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
                 </div>
-                <div class="card-body p-0">
-                    <pre id="log" class="m-0 p-3" style="min-height: 160px; font-family: 'Courier New', monospace; font-size: 0.875rem; background: #f8f9fa;" aria-label="Log de execução">(log vazio)</pre>
-                </div>
+                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-file-analytics me-2"></i>Resultado</h3>
+                <div class="log-header">
+                    <h3>� Resultado</h3>
                 </div>
-                <div class="card-body p-0">
-                    <pre id="out" class="m-0 p-3" style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 0.875rem; background: #f8f9fa;">(aguardando validação...)</pre>
-                </div>
+                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-tool me-2"></i>Diagnóstico</h3>
-                </div>
-                <div class="card-body">
-                    <div class="btn-list">
-                        <button class="btn btn-outline-secondary" onclick="checkJavaVersion()">
-                            <i class="ti ti-brand-java me-1"></i>Java version
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="checkJarStatus()">
-                            <i class="ti ti-file-zip me-1"></i>Check JAR
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="runJarCheck()">
-                            <i class="ti ti-play me-1"></i>Run JAR check
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="diagConnections()">
-                            <i class="ti ti-activity me-1"></i>Diag (/diag)
-                        </button>
-                        <button class="btn btn-outline-primary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">
-                            <i class="ti ti-test-pipe me-1"></i>Testar Popup
-                        </button>
-                    </div>
+                <h3>🔧 Diagnóstico</h3>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
+                    <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
+                    <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
+                    <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
+                    <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
                 </div>
             </div>
         </div>
@@ -874,50 +755,43 @@
         <!-- TAB: Documentos -->
         <div id="panel-docs" class="tabpanel">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-file-text me-2"></i>Documentos no Ficheiro SAFT</h3>
-                    <div class="card-actions">
-                        <button class="btn btn-sm btn-primary" onclick="exportDocsToCSV()">
-                            <i class="ti ti-download me-1"></i>Exportar CSV
-                        </button>
-                        <button class="btn btn-sm btn-success" onclick="exportDocsToExcel()">
-                            <i class="ti ti-file-spreadsheet me-1"></i>Exportar Excel
-                        </button>
+                <div class="log-header">
+                    <h3>📋 Documentos no Ficheiro SAFT</h3>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToCSV()">📥 Exportar CSV</button>
+                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToExcel()">📊 Exportar Excel</button>
                     </div>
                 </div>
-                <div class="card-body">
-                    <p class="text-muted mb-3">
-                        Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
-                    </p>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
+                </p>
 
-                    <!-- Filtros -->
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <label class="form-label" for="docs-search">
-                                <i class="ti ti-search me-1"></i>Pesquisar
-                            </label>
-                            <input type="text" class="form-control" id="docs-search" placeholder="Número, Cliente, Valor..." oninput="filterDocsTable()" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="docs-filter-type">
-                                <i class="ti ti-file-invoice me-1"></i>Tipo Documento
-                            </label>
-                            <select class="form-select" id="docs-filter-type" onchange="filterDocsTable()">
-                                <option value="">Todos</option>
-                                <option value="FT">Fatura (FT)</option>
-                                <option value="NC">Nota Crédito (NC)</option>
-                                <option value="ND">Nota Débito (ND)</option>
-                                <option value="FR">Fatura Recibo (FR)</option>
-                                <option value="GT">Guia Transporte (GT)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="docs-filter-status">
-                                <i class="ti ti-check me-1"></i>Status
-                            </label>
-                            <select class="form-select" id="docs-filter-status" onchange="filterDocsTable()">
-                                <option value="">Todos</option>
-                                <option value="N">Normal (N)</option>
+                <!-- Filtros -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Pesquisar</label>
+                        <input type="text" id="docs-search" placeholder="Número, Cliente, Valor..."
+                               oninput="filterDocsTable()"
+                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tipo Documento</label>
+                        <select id="docs-filter-type" onchange="filterDocsTable()"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                            <option value="">Todos</option>
+                            <option value="FT">Fatura (FT)</option>
+                            <option value="NC">Nota Crédito (NC)</option>
+                            <option value="ND">Nota Débito (ND)</option>
+                            <option value="FR">Fatura Recibo (FR)</option>
+                            <option value="GT">Guia Transporte (GT)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select id="docs-filter-status" onchange="filterDocsTable()"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                            <option value="">Todos</option>
+                            <option value="N">Normal (N)</option>
                             <option value="A">Anulado (A)</option>
                         </select>
                     </div>
@@ -1073,17 +947,13 @@
         <!-- TAB: Credenciais -->
         <div id="panel-creds" class="tabpanel">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-key me-2"></i>Gestão de credenciais AT</h3>
+                <h3>🔐 Gestão de credenciais AT</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
+                </p>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" onclick="loadCredsStatus()">🔄 Atualizar estado</button>
                 </div>
-                <div class="card-body">
-                    <div class="alert alert-info mb-3">
-                        <i class="ti ti-info-circle me-2"></i>
-                        As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
-                    </div>
-                    <button class="btn btn-outline-secondary mb-3" onclick="loadCredsStatus()">
-                        <i class="ti ti-refresh me-1"></i>Atualizar estado
-                    </button>
                 <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
                     <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
                         <div>
@@ -1165,35 +1035,22 @@
         <!-- TAB: Configuração -->
         <div id="panel-config" class="tabpanel">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-settings me-2"></i>Instalar FACTEMICLI.jar</h3>
+                <h3>⚙️ Instalar FACTEMICLI.jar</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Object Key (B2/S3)</label>
+                    <input type="text" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
                 </div>
-                <div class="card-body">
-                    <div class="alert alert-info mb-3">
-                        <i class="ti ti-info-circle me-2"></i>
-                        Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="jar_key">
-                            <i class="ti ti-cloud me-1"></i>Object Key (B2/S3)
-                        </label>
-                        <input type="text" class="form-control" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
-                        <small class="form-hint">Caminho do ficheiro JAR no bucket</small>
-                    </div>
-                    <button class="btn btn-primary" onclick="installJar()">
-                        <i class="ti ti-download me-1"></i>Instalar JAR
-                    </button>
-                </div>
+                <button class="btn" onclick="installJar()">📥 Instalar JAR</button>
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-book me-2"></i>Instruções de configuração</h3>
-                </div>
-                <div class="card-body">
-                    <ol class="text-muted" style="padding-left: 1.5rem; line-height: 1.8;">
-                        <li>Carregue o ficheiro <code class="code">FACTEMICLI.jar</code> para o seu bucket Backblaze B2 sob o prefixo <code class="code">pt/tools/</code></li>
-                        <li>Configure as variáveis de ambiente no Render:
+                <h3>📖 Instruções de configuração</h3>
+                <ol style="padding-left: 1.5rem; color: var(--text-secondary); line-height: 1.8;">
+                    <li>Carregue o ficheiro <code class="code">FACTEMICLI.jar</code> para o seu bucket Backblaze B2 sob o prefixo <code class="code">pt/tools/</code></li>
+                    <li>Configure as variáveis de ambiente no Render:
                         <ul style="margin-top: 0.5rem;">
                             <li><code class="code">B2_BUCKET=saftdoctor</code></li>
                             <li><code class="code">B2_REGION=eu-central-003</code></li>
@@ -1222,113 +1079,76 @@
         <!-- TAB: Admin (Sysadmin only) -->
         <div id="panel-admin" class="tabpanel">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-crown me-2"></i>Painel de Administração</h3>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-warning">
-                        <i class="ti ti-shield-lock me-2"></i>
-                        <strong>Área Restrita:</strong> Configuração de sistema acessível apenas para administradores.
-                    </div>
-                </div>
+                <h3>👑 Painel de Administração (Sysadmin)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Configuração de sistema acessível apenas para administradores.
+                </p>
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title"><i class="ti ti-mail me-2"></i>Configuração SMTP (ServerSMTP.com)</h3>
+                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label" for="smtp-host">SMTP Host</label>
+                    <input type="text" id="smtp-host" placeholder="mail.serversmtp.com" />
                 </div>
-                <div class="card-body">
-                    <p class="text-muted mb-3">
-                        Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
-                    </p>
 
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label required" for="smtp-host">
-                                <i class="ti ti-server me-1"></i>SMTP Host
-                            </label>
-                            <input type="text" class="form-control" id="smtp-host" placeholder="mail.serversmtp.com" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-port">SMTP Port</label>
+                    <input type="number" id="smtp-port" placeholder="587" value="587" />
+                </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label required" for="smtp-port">
-                                <i class="ti ti-plug me-1"></i>SMTP Port
-                            </label>
-                            <input type="number" class="form-control" id="smtp-port" placeholder="587" value="587" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-user">SMTP Username</label>
+                    <input type="text" id="smtp-user" placeholder="seu-username@serversmtp.com" />
+                </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label required" for="smtp-user">
-                                <i class="ti ti-user me-1"></i>SMTP Username
-                            </label>
-                            <input type="text" class="form-control" id="smtp-user" placeholder="seu-username@serversmtp.com" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-password">SMTP Password</label>
+                    <input type="password" id="smtp-password" placeholder="••••••••" />
+                </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label required" for="smtp-password">
-                                <i class="ti ti-lock me-1"></i>SMTP Password
-                            </label>
-                            <input type="password" class="form-control" id="smtp-password" placeholder="••••••••" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-email">From Email</label>
+                    <input type="email" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
+                </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label required" for="smtp-from-email">
-                                <i class="ti ti-mail me-1"></i>From Email
-                            </label>
-                            <input type="email" class="form-control" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-from-name">From Name</label>
+                    <input type="text" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
+                </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label" for="smtp-from-name">
-                                <i class="ti ti-signature me-1"></i>From Name
-                            </label>
-                            <input type="text" class="form-control" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
-                        </div>
+                <div class="form-group">
+                    <label class="form-label" for="smtp-app-url">URL da Aplicação ⚠️ (Obrigatório para links de reset)</label>
+                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
+                    <small style="color: var(--text-secondary);">
+                        URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)
+                    </small>
+                </div>
 
-                        <div class="col-12">
-                            <label class="form-label required" for="smtp-app-url">
-                                <i class="ti ti-world me-1"></i>URL da Aplicação
-                            </label>
-                            <input type="url" class="form-control" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
-                            <small class="form-hint">URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)</small>
-                        </div>
-                    </div>
+                <div class="btn-group" style="margin-top: 1.5rem;">
+                    <button class="btn" onclick="loadSmtpConfig()">🔄 Carregar Config</button>
+                    <button class="btn" onclick="saveSmtpConfig()">💾 Guardar</button>
+                    <button class="btn" onclick="deleteSmtpConfig()" style="background: var(--error);">🗑️ Eliminar</button>
+                </div>
 
-                    <div class="btn-list mt-4">
-                        <button class="btn btn-outline-primary" onclick="loadSmtpConfig()">
-                            <i class="ti ti-refresh me-1"></i>Carregar Config
-                        </button>
-                        <button class="btn btn-primary" onclick="saveSmtpConfig()">
-                            <i class="ti ti-device-floppy me-1"></i>Guardar
-                        </button>
-                        <button class="btn btn-outline-danger" onclick="deleteSmtpConfig()">
-                            <i class="ti ti-trash me-1"></i>Eliminar
-                        </button>
-                    </div>
+                <div id="smtp-config-source" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); display: none;">
+                    <strong>Origem:</strong> <span id="smtp-source-text">-</span>
+                </div>
 
-                    <div id="smtp-config-source" class="alert alert-info mt-3" style="display: none;">
-                        <strong>Origem:</strong> <span id="smtp-source-text">-</span>
-                    </div>
-
-                    <hr class="my-4">
-
-                    <h4 class="mb-3"><i class="ti ti-mail-forward me-2"></i>Testar Configuração SMTP</h4>
-                    <p class="text-muted small mb-3">
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;">✉️ Testar Configuração SMTP</h4>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
                         Envie um email de teste para verificar se a configuração está a funcionar.
                     </p>
-                    <div class="mb-3">
-                        <label class="form-label" for="smtp-test-email">
-                            <i class="ti ti-at me-1"></i>Email de Teste
-                        </label>
-                        <input type="email" class="form-control" id="smtp-test-email" placeholder="seu@email.com" />
+                    <div class="form-group">
+                        <label class="form-label" for="smtp-test-email">Email de Teste</label>
+                        <input type="email" id="smtp-test-email" placeholder="seu@email.com" />
                     </div>
-                    <button class="btn btn-success" onclick="testSmtpConfig()">
-                        <i class="ti ti-send me-1"></i>Enviar Email de Teste
-                    </button>
-                </div>
-            </div>
-        </div>
-
+                    <button class="btn" onclick="testSmtpConfig()" style="background: var(--success);">📧 Enviar Email de Teste</button>
                 </div>
             </div>
         </div>
@@ -1339,77 +1159,53 @@
     </div>
 
     <!-- Profile Modal -->
-    <div class="modal modal-blur fade show" id="profile-overlay" style="display: none; background: rgba(32, 43, 61, 0.85);">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
-                <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white;">
-                    <h5 class="modal-title">
-                        <i class="ti ti-user-cog me-2"></i>Perfil de Utilizador
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" onclick="closeProfileModal()"></button>
+    <div class="login-overlay" id="profile-overlay" style="display: none;">
+        <div class="login-card" style="max-width: 500px;">
+            <h2 style="margin-bottom: 1.5rem;">⚙️ Perfil de Utilizador</h2>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-username">Username</label>
+                <input type="text" id="profile-username" disabled style="background: var(--bg); cursor: not-allowed;" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="profile-email">Email</label>
+                <input type="email" id="profile-email" placeholder="seu@email.com" />
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    Necessário para recuperação de password
                 </div>
-                <div class="modal-body">
-                    <!-- Profile Info Section -->
-                    <div class="mb-4">
-                        <div class="mb-3">
-                            <label class="form-label" for="profile-username">
-                                <i class="ti ti-user me-1"></i>Username
-                            </label>
-                            <input type="text" class="form-control" id="profile-username" disabled style="background: #f8f9fa; cursor: not-allowed;" />
-                        </div>
+            </div>
 
-                        <div class="mb-3">
-                            <label class="form-label" for="profile-email">
-                                <i class="ti ti-mail me-1"></i>Email
-                            </label>
-                            <input type="email" class="form-control" id="profile-email" placeholder="seu@email.com" />
-                            <small class="form-hint">
-                                Necessário para recuperação de password
-                            </small>
-                        </div>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
+            </div>
 
-                        <button class="btn btn-primary" onclick="updateProfileEmail()">
-                            <i class="ti ti-device-floppy me-1"></i>Guardar Email
-                        </button>
-                    </div>
+            <!-- Change Password Section -->
+            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">🔐 Alterar Password</h3>
 
-                    <!-- Change Password Section -->
-                    <hr class="my-4">
-
-                    <h5 class="mb-3">
-                        <i class="ti ti-lock me-2"></i>Alterar Password
-                    </h5>
-
-                    <div class="mb-3">
-                        <label class="form-label required" for="profile-current-password">
-                            <i class="ti ti-key me-1"></i>Password Atual
-                        </label>
-                        <input type="password" class="form-control" id="profile-current-password" placeholder="password atual" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label required" for="profile-new-password">
-                            <i class="ti ti-key-plus me-1"></i>Nova Password
-                        </label>
-                        <input type="password" class="form-control" id="profile-new-password" placeholder="nova password" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label required" for="profile-new-password-confirm">
-                            <i class="ti ti-checks me-1"></i>Confirmar Nova Password
-                        </label>
-                        <input type="password" class="form-control" id="profile-new-password-confirm" placeholder="confirme a nova password" />
-                    </div>
-
-                    <button class="btn btn-warning" onclick="changePasswordFromProfile()">
-                        <i class="ti ti-lock-access me-1"></i>Alterar Password
-                    </button>
+                <div class="form-group">
+                    <label class="form-label" for="profile-current-password">Password Atual</label>
+                    <input type="password" id="profile-current-password" placeholder="password atual" />
                 </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="closeProfileModal()">
-                        <i class="ti ti-x me-1"></i>Fechar
-                    </button>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password">Nova Password</label>
+                    <input type="password" id="profile-new-password" placeholder="nova password" />
                 </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="profile-new-password-confirm">Confirmar Nova Password</label>
+                    <input type="password" id="profile-new-password-confirm" placeholder="confirme a nova password" />
+                </div>
+
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn" onclick="changePasswordFromProfile()" style="background: var(--warning);">🔑 Alterar Password</button>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1.5rem;">
+                <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
             </div>
         </div>
     </div>
@@ -1677,8 +1473,5 @@
             <a href="mailto:support@saft-doctor.com">📧 Contactar Suporte</a>
         </div>
     </div>
-
-    <!-- Tabler JS -->
-    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/js/tabler.min.js"></script>
 </body>
 </html>
