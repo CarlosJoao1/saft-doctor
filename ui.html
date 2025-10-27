@@ -507,7 +507,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=54"></script>
+    <script src="/static/app.js?v=55"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -1126,22 +1126,35 @@
         <!-- TAB: Configuração -->
         <div id="panel-config" class="tabpanel">
             <div class="card">
-                <h3>⚙️ Instalar FACTEMICLI.jar</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
-                </p>
-                <div class="form-group">
-                    <label class="form-label">Object Key (B2/S3)</label>
-                    <input type="text" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-settings me-2"></i>Instalar FACTEMICLI.jar</h3>
                 </div>
-                <button class="btn" onclick="installJar()">📥 Instalar JAR</button>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="ti ti-info-circle me-2"></i>
+                        Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="jar_key">
+                            <i class="ti ti-cloud me-1"></i>Object Key (B2/S3)
+                        </label>
+                        <input type="text" class="form-control" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+                        <small class="form-hint">Caminho do ficheiro JAR no bucket</small>
+                    </div>
+                    <button class="btn btn-primary" onclick="installJar()">
+                        <i class="ti ti-download me-1"></i>Instalar JAR
+                    </button>
+                </div>
             </div>
 
             <div class="card">
-                <h3>📖 Instruções de configuração</h3>
-                <ol style="padding-left: 1.5rem; color: var(--text-secondary); line-height: 1.8;">
-                    <li>Carregue o ficheiro <code class="code">FACTEMICLI.jar</code> para o seu bucket Backblaze B2 sob o prefixo <code class="code">pt/tools/</code></li>
-                    <li>Configure as variáveis de ambiente no Render:
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-book me-2"></i>Instruções de configuração</h3>
+                </div>
+                <div class="card-body">
+                    <ol class="text-muted" style="padding-left: 1.5rem; line-height: 1.8;">
+                        <li>Carregue o ficheiro <code class="code">FACTEMICLI.jar</code> para o seu bucket Backblaze B2 sob o prefixo <code class="code">pt/tools/</code></li>
+                        <li>Configure as variáveis de ambiente no Render:
                         <ul style="margin-top: 0.5rem;">
                             <li><code class="code">B2_BUCKET=saftdoctor</code></li>
                             <li><code class="code">B2_REGION=eu-central-003</code></li>
@@ -1170,76 +1183,109 @@
         <!-- TAB: Admin (Sysadmin only) -->
         <div id="panel-admin" class="tabpanel">
             <div class="card">
-                <h3>👑 Painel de Administração (Sysadmin)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Configuração de sistema acessível apenas para administradores.
-                </p>
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-crown me-2"></i>Painel de Administração</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="ti ti-shield-lock me-2"></i>
+                        <strong>Área Restrita:</strong> Configuração de sistema acessível apenas para administradores.
+                    </div>
+                </div>
             </div>
 
             <div class="card">
-                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
-                </p>
-
-                <div class="form-group">
-                    <label class="form-label" for="smtp-host">SMTP Host</label>
-                    <input type="text" id="smtp-host" placeholder="mail.serversmtp.com" />
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-mail me-2"></i>Configuração SMTP (ServerSMTP.com)</h3>
                 </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
+                    </p>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-port">SMTP Port</label>
-                    <input type="number" id="smtp-port" placeholder="587" value="587" />
-                </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label required" for="smtp-host">
+                                <i class="ti ti-server me-1"></i>SMTP Host
+                            </label>
+                            <input type="text" class="form-control" id="smtp-host" placeholder="mail.serversmtp.com" />
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-user">SMTP Username</label>
-                    <input type="text" id="smtp-user" placeholder="seu-username@serversmtp.com" />
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label required" for="smtp-port">
+                                <i class="ti ti-plug me-1"></i>SMTP Port
+                            </label>
+                            <input type="number" class="form-control" id="smtp-port" placeholder="587" value="587" />
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-password">SMTP Password</label>
-                    <input type="password" id="smtp-password" placeholder="••••••••" />
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label required" for="smtp-user">
+                                <i class="ti ti-user me-1"></i>SMTP Username
+                            </label>
+                            <input type="text" class="form-control" id="smtp-user" placeholder="seu-username@serversmtp.com" />
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-from-email">From Email</label>
-                    <input type="email" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label required" for="smtp-password">
+                                <i class="ti ti-lock me-1"></i>SMTP Password
+                            </label>
+                            <input type="password" class="form-control" id="smtp-password" placeholder="••••••••" />
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-from-name">From Name</label>
-                    <input type="text" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label required" for="smtp-from-email">
+                                <i class="ti ti-mail me-1"></i>From Email
+                            </label>
+                            <input type="email" class="form-control" id="smtp-from-email" placeholder="noreply@saft.aquinos.io" />
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="smtp-app-url">URL da Aplicação ⚠️ (Obrigatório para links de reset)</label>
-                    <input type="url" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
-                    <small style="color: var(--text-secondary);">
-                        URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)
-                    </small>
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="smtp-from-name">
+                                <i class="ti ti-signature me-1"></i>From Name
+                            </label>
+                            <input type="text" class="form-control" id="smtp-from-name" placeholder="SAFT Doctor" value="SAFT Doctor" />
+                        </div>
 
-                <div class="btn-group" style="margin-top: 1.5rem;">
-                    <button class="btn" onclick="loadSmtpConfig()">🔄 Carregar Config</button>
-                    <button class="btn" onclick="saveSmtpConfig()">💾 Guardar</button>
-                    <button class="btn" onclick="deleteSmtpConfig()" style="background: var(--error);">🗑️ Eliminar</button>
-                </div>
+                        <div class="col-12">
+                            <label class="form-label required" for="smtp-app-url">
+                                <i class="ti ti-world me-1"></i>URL da Aplicação
+                            </label>
+                            <input type="url" class="form-control" id="smtp-app-url" placeholder="https://saft.aquinos.io" value="https://saft.aquinos.io" />
+                            <small class="form-hint">URL completo onde a aplicação está hospedada (usado nos links de recuperação de password)</small>
+                        </div>
+                    </div>
 
-                <div id="smtp-config-source" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); display: none;">
-                    <strong>Origem:</strong> <span id="smtp-source-text">-</span>
-                </div>
+                    <div class="btn-list mt-4">
+                        <button class="btn btn-outline-primary" onclick="loadSmtpConfig()">
+                            <i class="ti ti-refresh me-1"></i>Carregar Config
+                        </button>
+                        <button class="btn btn-primary" onclick="saveSmtpConfig()">
+                            <i class="ti ti-device-floppy me-1"></i>Guardar
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteSmtpConfig()">
+                            <i class="ti ti-trash me-1"></i>Eliminar
+                        </button>
+                    </div>
 
-                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 1rem;">✉️ Testar Configuração SMTP</h4>
-                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                    <div id="smtp-config-source" class="alert alert-info mt-3" style="display: none;">
+                        <strong>Origem:</strong> <span id="smtp-source-text">-</span>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <h4 class="mb-3"><i class="ti ti-mail-forward me-2"></i>Testar Configuração SMTP</h4>
+                    <p class="text-muted small mb-3">
                         Envie um email de teste para verificar se a configuração está a funcionar.
                     </p>
-                    <div class="form-group">
-                        <label class="form-label" for="smtp-test-email">Email de Teste</label>
-                        <input type="email" id="smtp-test-email" placeholder="seu@email.com" />
+                    <div class="mb-3">
+                        <label class="form-label" for="smtp-test-email">
+                            <i class="ti ti-at me-1"></i>Email de Teste
+                        </label>
+                        <input type="email" class="form-control" id="smtp-test-email" placeholder="seu@email.com" />
                     </div>
-                    <button class="btn" onclick="testSmtpConfig()" style="background: var(--success);">📧 Enviar Email de Teste</button>
+                    <button class="btn btn-success" onclick="testSmtpConfig()">
+                        <i class="ti ti-send me-1"></i>Enviar Email de Teste
+                    </button>
                 </div>
             </div>
         </div>
