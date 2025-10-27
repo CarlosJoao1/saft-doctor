@@ -824,8 +824,12 @@ window.enableHeartbeat = function(intervalMs = 5000) {
 
 // Tabs
 window.showTab = function(id) {
+    // Remove active from old tabs and nav-links
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tabpanel').forEach(el => el.classList.remove('active'));
+
+    // Add active to new tab/nav-link and panel
     const btn = document.querySelector(`[data-tab="${id}"]`);
     const panel = document.getElementById(`panel-${id}`);
     if (btn && panel) {
