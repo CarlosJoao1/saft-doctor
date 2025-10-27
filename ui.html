@@ -507,27 +507,32 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=51"></script>
+    <script src="/static/app.js?v=53"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
-    <nav class="navbar">
-        <div class="navbar-brand">
-            🩺 SAFT Doctor
-        </div>
-        <div class="navbar-user">
-            <div class="user-info">
-                <span>👤</span>
-                <span id="navbar-username">Não autenticado</span>
+    <header class="navbar navbar-expand-md navbar-dark sticky-top" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="ti ti-file-check me-2"></i>
+                <strong>SAFT Doctor</strong>
+            </a>
+            <div class="navbar-nav flex-row order-md-last">
+                <div class="nav-item d-none d-md-flex me-3">
+                    <div class="d-flex align-items-center text-white-50">
+                        <i class="ti ti-user me-2"></i>
+                        <span id="navbar-username">Não autenticado</span>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-light me-2" id="btn-profile" onclick="showProfileModal()" style="display: none;">
+                    <i class="ti ti-settings me-1"></i> Perfil
+                </button>
+                <button class="btn btn-sm btn-outline-light" id="btn-logout" onclick="logout()" style="display: none;">
+                    <i class="ti ti-logout me-1"></i> Sair
+                </button>
             </div>
-            <button class="btn-logout" onclick="showProfileModal()" id="btn-profile" style="display: none; margin-right: 0.5rem;">
-                ⚙️ Perfil
-            </button>
-            <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
-                Sair
-            </button>
         </div>
-    </nav>
+    </header>
 
     <!-- Login overlay (aparece quando não está autenticado) -->
     <div class="login-overlay" id="login-overlay">
@@ -628,66 +633,114 @@
         </div>
     </div>
 
-    <div class="container" style="padding-bottom: 4rem;">
-        <div style="margin-bottom: 1rem;">
-            <h1>Validador profissional de ficheiros SAFT-T (PT)</h1>
-        </div>
+    <div class="page">
+        <div class="page-wrapper">
+            <div class="page-header d-print-none">
+                <div class="container-xl">
+                    <div class="row g-2 align-items-center">
+                        <div class="col">
+                            <div class="page-pretitle">Sistema Profissional de Validação</div>
+                            <h2 class="page-title">
+                                <i class="ti ti-file-check me-2"></i>
+                                Validador SAFT-T (PT)
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <div class="tabs">
-            <button class="tab active" data-tab="app" onclick="showTab('app')">📄 Validação</button>
-            <button class="tab" data-tab="docs" onclick="showTab('docs')">📋 Documentos</button>
-            <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
-            <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
-            <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
-            <button class="tab" id="admin-tab" data-tab="admin" onclick="showTab('admin')" style="display: none;">👑 Admin</button>
-        </div>
+            <div class="page-body">
+                <div class="container-xl">
+                    <!-- Navigation Tabs -->
+                    <ul class="nav nav-tabs nav-tabs-lg mb-3" data-bs-toggle="tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <a href="#tab-app" class="nav-link active" data-tab="app" onclick="showTab('app')" role="tab">
+                                <i class="ti ti-upload me-2"></i>Validação
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a href="#tab-docs" class="nav-link" data-tab="docs" onclick="showTab('docs')" role="tab">
+                                <i class="ti ti-file-text me-2"></i>Documentos
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a href="#tab-history" class="nav-link" data-tab="history" onclick="showTab('history')" role="tab">
+                                <i class="ti ti-history me-2"></i>Histórico
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a href="#tab-creds" class="nav-link" data-tab="creds" onclick="showTab('creds')" role="tab">
+                                <i class="ti ti-key me-2"></i>Credenciais AT
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a href="#tab-config" class="nav-link" data-tab="config" onclick="showTab('config')" role="tab">
+                                <i class="ti ti-settings me-2"></i>Configuração
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation" id="admin-tab-li" style="display: none;">
+                            <a href="#tab-admin" class="nav-link" id="admin-tab" data-tab="admin" onclick="showTab('admin')" role="tab">
+                                <i class="ti ti-crown me-2"></i>Admin
+                            </a>
+                        </li>
+                    </ul>
 
-        <div class="checkbox-label" style="margin-bottom: 1.5rem;">
-            <input type="checkbox" id="hb" />
-            <span>Auto-reload quando o backend reinicia (opcional)</span>
-        </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="hb" role="switch">
+                        <label class="form-check-label" for="hb">Auto-reload quando o backend reinicia (opcional)</label>
+                    </div>
 
         <!-- TAB: Validação -->
         <div id="panel-app" class="tabpanel active">
             <div class="card">
-                <h3>📤 Validar ficheiro SAFT</h3>
-                <div class="form-group">
-                    <label class="form-label">Escolha um ficheiro XML</label>
-                    <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-upload me-2"></i>Validar ficheiro SAFT</h3>
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Workflow de validação</label>
-                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border-radius: 6px; font-size: 0.875rem; color: #0d47a1;">
-                        <strong>📋 Processo em 2 fases:</strong><br>
-                        1️⃣ <strong>Validar</strong>: Verifica sintaxe XML<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Com credenciais AT: output completo + estatísticas<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Sem credenciais: validação básica de sintaxe<br>
-                        2️⃣ <strong>Enviar</strong>: Submete à AT (requer credenciais obrigatórias)
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label required" for="file">Escolha um ficheiro XML</label>
+                        <input type="file" class="form-control" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
+                        <small class="form-hint">Formatos aceites: .xml (SAFT-T PT)</small>
                     </div>
-                </div>
 
-                <!-- Fase 1: Validação -->
-                <div id="validation-phase">
-                    <div class="btn-group">
-                        <button class="btn" id="btn-jar" onclick="validateSmart()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                        <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                        <button class="btn btn-info" onclick="checkDocs()">
-                            <span>📄</span> Checkar os Docs
-                        </button>
-                        <button class="btn" onclick="presignUpload()">
-                            <span>☁️</span> Upload via Presign
-                        </button>
-                        <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                            <span>☁️</span> Validar do B2
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
-                            <span>👁️</span> Ver comando
-                        </button>
+                    <div class="alert alert-info mb-3">
+                        <div class="d-flex">
+                            <div>
+                                <i class="ti ti-info-circle fs-2 me-3"></i>
+                            </div>
+                            <div>
+                                <h4 class="alert-title">Processo em 2 fases</h4>
+                                <div class="text-muted">
+                                    <strong>1. Validar:</strong> Verifica sintaxe XML<br>
+                                    • Com credenciais AT: output completo + estatísticas<br>
+                                    • Sem credenciais: validação básica de sintaxe<br>
+                                    <strong>2. Enviar:</strong> Submete à AT (requer credenciais obrigatórias)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fase 1: Validação -->
+                    <div id="validation-phase">
+                        <div class="btn-list">
+                            <button class="btn btn-primary" id="btn-jar" onclick="validateSmart()">
+                                <i class="ti ti-search me-1"></i> 1. Validar Ficheiro
+                            </button>
+                            <button class="btn btn-outline-primary" id="btn-validate" onclick="validate()">
+                                <i class="ti ti-check me-1"></i> Validação básica
+                            </button>
+                            <button class="btn btn-info" onclick="checkDocs()">
+                                <i class="ti ti-file-text me-1"></i> Checkar os Docs
+                            </button>
+                            <button class="btn btn-cyan" onclick="presignUpload()">
+                                <i class="ti ti-cloud-upload me-1"></i> Upload via Presign
+                            </button>
+                            <button class="btn btn-teal" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
+                                <i class="ti ti-cloud-check me-1"></i> Validar do B2
+                            </button>
+                            <button class="btn btn-ghost-secondary" onclick="previewJarCommand('validar')">
+                                <i class="ti ti-eye me-1"></i> Ver comando
+                            </button>
                     </div>
                     <div style="margin-top: 0.75rem; padding: 0.6rem; background: var(--bg); border-radius: 8px; font-size: 0.9rem;">
                         <span style="color: var(--text-secondary);">object_key:</span>
@@ -1154,6 +1207,10 @@
                         <input type="email" id="smtp-test-email" placeholder="seu@email.com" />
                     </div>
                     <button class="btn" onclick="testSmtpConfig()" style="background: var(--success);">📧 Enviar Email de Teste</button>
+                </div>
+            </div>
+        </div>
+
                 </div>
             </div>
         </div>
