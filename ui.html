@@ -508,7 +508,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=60"></script>
+    <script src="/static/app.js?v=61"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -815,19 +815,31 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="log-header">
-                    <h3>� Log de execução</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-terminal me-2"></i>Log de execução
+                        </h5>
+                        <button class="btn btn-outline-light btn-sm" onclick="clearLog()">
+                            <i class="bi bi-x-circle me-1"></i>Limpar log
+                        </button>
+                    </div>
                 </div>
-                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
+                <div class="card-body">
+                    <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
+                </div>
             </div>
 
-            <div class="card">
-                <div class="log-header">
-                    <h3>� Resultado</h3>
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-file-earmark-check me-2"></i>Resultado
+                    </h5>
                 </div>
-                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
+                <div class="card-body">
+                    <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
+                </div>
             </div>
 
             <div class="card">
@@ -844,30 +856,39 @@
 
         <!-- TAB: Documentos -->
         <div id="panel-docs" class="tabpanel">
-            <div class="card">
-                <div class="log-header">
-                    <h3>📋 Documentos no Ficheiro SAFT</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToCSV()">📥 Exportar CSV</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToExcel()">📊 Exportar Excel</button>
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-files me-2"></i>Documentos no Ficheiro SAFT
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light" onclick="exportDocsToCSV()">
+                            <i class="bi bi-filetype-csv me-1"></i>CSV
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportDocsToExcel()">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                        </button>
                     </div>
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
-                </p>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
+                    </p>
 
                 <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="form-group">
-                        <label class="form-label">Pesquisar</label>
-                        <input type="text" id="docs-search" placeholder="Número, Cliente, Valor..."
-                               oninput="filterDocsTable()"
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-search me-1"></i>Pesquisar
+                        </label>
+                        <input type="text" class="form-control" id="docs-search" placeholder="Número, Cliente, Valor..."
+                               oninput="filterDocsTable()" />
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Tipo Documento</label>
-                        <select id="docs-filter-type" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-file-text me-1"></i>Tipo Documento
+                        </label>
+                        <select class="form-select" id="docs-filter-type" onchange="filterDocsTable()">
                             <option value="">Todos</option>
                             <option value="FT">Fatura (FT)</option>
                             <option value="NC">Nota Crédito (NC)</option>
@@ -876,10 +897,11 @@
                             <option value="GT">Guia Transporte (GT)</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <select id="docs-filter-status" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-check-circle me-1"></i>Status
+                        </label>
+                        <select class="form-select" id="docs-filter-status" onchange="filterDocsTable()">
                             <option value="">Todos</option>
                             <option value="N">Normal (N)</option>
                             <option value="A">Anulado (A)</option>
@@ -941,39 +963,50 @@
                     <div style="display:inline-block; width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite;"></div>
                     <div style="margin-top:1rem; color:#64748b;">A carregar documentos...</div>
                 </div>
+                </div>
             </div>
         </div>
 
         <!-- TAB: Histórico -->
         <div id="panel-history" class="tabpanel">
-            <div class="card">
-                <div class="log-header">
-                    <h3>📜 Histórico de Validações</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Atualizar</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportHistoryToExcel()">📊 Exportar Excel</button>
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history me-2"></i>Histórico de Validações
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light" onclick="loadHistory()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportHistoryToExcel()">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                        </button>
                     </div>
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
-                </p>
-                
-                <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="form-group">
-                        <label class="form-label">Filtrar por NIF</label>
-                        <input type="text" id="history-filter-nif" placeholder="Ex: 501789227" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Ano</label>
-                        <input type="text" id="history-filter-year" placeholder="Ex: 2025" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Mês</label>
-                        <input type="text" id="history-filter-month" placeholder="Ex: 09" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
+                    </p>
+
+                    <!-- Filtros -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-nif">
+                                <i class="bi bi-building me-1"></i>Filtrar por NIF
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-nif" placeholder="Ex: 501789227" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-year">
+                                <i class="bi bi-calendar me-1"></i>Ano
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-year" placeholder="Ex: 2025" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-month">
+                                <i class="bi bi-calendar3 me-1"></i>Mês
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-month" placeholder="Ex: 09" />
                     </div>
                     <div class="form-group" style="display: flex; align-items: flex-end;">
                         <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
@@ -1036,14 +1069,20 @@
 
         <!-- TAB: Credenciais -->
         <div id="panel-creds" class="tabpanel">
-            <div class="card">
-                <h3>🔐 Gestão de credenciais AT</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
-                </p>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="loadCredsStatus()">🔄 Atualizar estado</button>
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-warning">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-shield-lock me-2"></i>Gestão de credenciais AT
+                    </h5>
                 </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-shield-check me-2"></i>
+                        As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
+                    </div>
+                    <button class="btn btn-outline-secondary mb-3" onclick="loadCredsStatus()">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Atualizar estado
+                    </button>
                 <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
                     <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
                         <div>
@@ -1124,16 +1163,26 @@
 
         <!-- TAB: Configuração -->
         <div id="panel-config" class="tabpanel">
-            <div class="card">
-                <h3>⚙️ Instalar FACTEMICLI.jar</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
-                </p>
-                <div class="form-group">
-                    <label class="form-label">Object Key (B2/S3)</label>
-                    <input type="text" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-gear me-2"></i>Instalar FACTEMICLI.jar
+                    </h5>
                 </div>
-                <button class="btn" onclick="installJar()">📥 Instalar JAR</button>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label" for="jar_key">
+                            <i class="bi bi-cloud me-1"></i>Object Key (B2/S3)
+                        </label>
+                        <input type="text" class="form-control" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+                    </div>
+                    <button class="btn btn-primary" onclick="installJar()">
+                        <i class="bi bi-download me-2"></i>Instalar JAR
+                    </button>
+                </div>
             </div>
 
             <div class="card">
@@ -1168,16 +1217,23 @@
 
         <!-- TAB: Admin (Sysadmin only) -->
         <div id="panel-admin" class="tabpanel">
-            <div class="card">
-                <h3>👑 Painel de Administração (Sysadmin)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            <div class="alert alert-warning shadow-sm">
+                <h5 class="alert-heading">
+                    <i class="bi bi-person-badge me-2"></i>Painel de Administração (Sysadmin)
+                </h5>
+                <p class="mb-0">
                     Configuração de sistema acessível apenas para administradores.
                 </p>
             </div>
 
-            <div class="card">
-                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-envelope-at me-2"></i>Configuração SMTP (ServerSMTP.com)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
                     Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
                 </p>
 
