@@ -507,7 +507,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=55"></script>
+    <script src="/static/app.js?v=56"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -535,99 +535,138 @@
     </header>
 
     <!-- Login overlay (aparece quando não está autenticado) -->
-    <div class="login-overlay" id="login-overlay">
-        <div class="login-card">
-            <h2 style="margin-bottom: 1.5rem;">🔐 Autenticação</h2>
+    <div class="modal modal-blur fade show" id="login-overlay" style="display: flex; background: rgba(32, 43, 61, 0.85);" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content" style="background: white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white;">
+                    <h5 class="modal-title">
+                        <i class="ti ti-lock me-2"></i>Autenticação
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <!-- Tabs para Login / Registar -->
+                    <ul class="nav nav-tabs mb-3" data-bs-toggle="tabs">
+                        <li class="nav-item">
+                            <a href="#tabs-login" class="nav-link active" id="login-tab-btn" onclick="showAuthTab('login')">
+                                <i class="ti ti-login me-1"></i>Login
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#tabs-register" class="nav-link" id="register-tab-btn" onclick="showAuthTab('register')">
+                                <i class="ti ti-user-plus me-1"></i>Registar
+                            </a>
+                        </li>
+                    </ul>
 
-            <!-- Tabs para Login / Registar -->
-            <div class="btn-group" style="margin-bottom: 1.5rem;">
-                <button class="btn" id="login-tab-btn" onclick="showAuthTab('login')" style="flex: 1;">🔓 Login</button>
-                <button class="btn" id="register-tab-btn" onclick="showAuthTab('register')" style="flex: 1; background: var(--text-secondary);">✍️ Registar</button>
-            </div>
-
-            <!-- Login Form -->
-            <div id="login-form" style="display: block;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="login_user" placeholder="dev" value="dev" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" id="login_pass" placeholder="dev" value="dev" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="doLogin()">🔓 Entrar</button>
-                </div>
-                <div style="margin-top: 1rem; text-align: center;">
-                    <button type="button" onclick="showAuthTab('password-reset')" style="background: none; border: none; font-size: 0.875rem; color: var(--primary); text-decoration: underline; cursor: pointer; padding: 0;">
-                        Esqueceu a password?
-                    </button>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Utilize <strong>dev/dev</strong> para acesso rápido
-                </div>
-            </div>
-
-            <!-- Register Form -->
-            <div id="register-form" style="display: none;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="register_user" placeholder="username" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email (opcional)</label>
-                    <input type="email" id="register_email" placeholder="seu@email.com" />
-                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                        Recomendado para recuperação de password
+                    <!-- Login Form -->
+                    <div id="login-form" style="display: block;">
+                        <div class="mb-3">
+                            <label class="form-label required" for="login_user">
+                                <i class="ti ti-user me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="login_user" placeholder="dev" value="dev" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required" for="login_pass">
+                                <i class="ti ti-key me-1"></i>Password
+                            </label>
+                            <input type="password" class="form-control" id="login_pass" placeholder="dev" value="dev" />
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="doLogin()">
+                            <i class="ti ti-login me-1"></i>Entrar
+                        </button>
+                        <div class="text-center mt-3">
+                            <a href="javascript:void(0)" onclick="showAuthTab('password-reset')" class="link-secondary">
+                                <i class="ti ti-help me-1"></i>Esqueceu a password?
+                            </a>
+                        </div>
+                        <div class="alert alert-info mt-3 mb-0 small">
+                            <i class="ti ti-info-circle me-1"></i>
+                            Utilize <strong>dev/dev</strong> para acesso rápido
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" id="register_pass" placeholder="password" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Confirmar Password</label>
-                    <input type="password" id="register_pass_confirm" placeholder="confirme a password" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="doRegister()">✍️ Criar Conta</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Após registar, faça login com as suas credenciais
-                </div>
-            </div>
 
-            <!-- Password Reset Request Form -->
-            <div id="password-reset-form" style="display: none;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="reset_username" placeholder="username" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="requestPasswordReset()">📧 Enviar Email</button>
-                    <button class="btn" onclick="showAuthTab('login')" style="background: var(--text-secondary);">Voltar</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Receberá um email com instruções para recuperar a password
-                </div>
-            </div>
+                    <!-- Register Form -->
+                    <div id="register-form" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label required" for="register_user">
+                                <i class="ti ti-user me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="register_user" placeholder="username" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="register_email">
+                                <i class="ti ti-mail me-1"></i>Email (opcional)
+                            </label>
+                            <input type="email" class="form-control" id="register_email" placeholder="seu@email.com" />
+                            <small class="form-hint">Recomendado para recuperação de password</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required" for="register_pass">
+                                <i class="ti ti-key me-1"></i>Password
+                            </label>
+                            <input type="password" class="form-control" id="register_pass" placeholder="password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required" for="register_pass_confirm">
+                                <i class="ti ti-checks me-1"></i>Confirmar Password
+                            </label>
+                            <input type="password" class="form-control" id="register_pass_confirm" placeholder="confirme a password" />
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="doRegister()">
+                            <i class="ti ti-user-plus me-1"></i>Criar Conta
+                        </button>
+                        <div class="text-center text-muted small mt-3">
+                            Após registar, faça login com as suas credenciais
+                        </div>
+                    </div>
 
-            <!-- New Password Form (shown when URL has reset_token) -->
-            <div id="new-password-form" style="display: none;">
-                <h3 style="margin-bottom: 1rem; color: var(--primary);">Criar Nova Password</h3>
-                <div class="form-group">
-                    <label class="form-label">Nova Password</label>
-                    <input type="password" id="new_password" placeholder="nova password" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Confirmar Password</label>
-                    <input type="password" id="new_password_confirm" placeholder="confirme a nova password" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="confirmPasswordReset()">✅ Guardar Password</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Após guardar, poderá fazer login com a nova password
+                    <!-- Password Reset Request Form -->
+                    <div id="password-reset-form" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label required" for="reset_username">
+                                <i class="ti ti-user me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="reset_username" placeholder="username" />
+                        </div>
+                        <div class="btn-list">
+                            <button class="btn btn-primary" onclick="requestPasswordReset()">
+                                <i class="ti ti-mail me-1"></i>Enviar Email
+                            </button>
+                            <button class="btn btn-secondary" onclick="showAuthTab('login')">
+                                <i class="ti ti-arrow-left me-1"></i>Voltar
+                            </button>
+                        </div>
+                        <div class="alert alert-info mt-3 mb-0 small">
+                            <i class="ti ti-info-circle me-1"></i>
+                            Receberá um email com instruções para recuperar a password
+                        </div>
+                    </div>
+
+                    <!-- New Password Form (shown when URL has reset_token) -->
+                    <div id="new-password-form" style="display: none;">
+                        <h4 class="text-primary mb-3">
+                            <i class="ti ti-lock-open me-2"></i>Criar Nova Password
+                        </h4>
+                        <div class="mb-3">
+                            <label class="form-label required" for="new_password">
+                                <i class="ti ti-key me-1"></i>Nova Password
+                            </label>
+                            <input type="password" class="form-control" id="new_password" placeholder="nova password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required" for="new_password_confirm">
+                                <i class="ti ti-checks me-1"></i>Confirmar Password
+                            </label>
+                            <input type="password" class="form-control" id="new_password_confirm" placeholder="confirme a nova password" />
+                        </div>
+                        <button class="btn btn-success w-100" onclick="confirmPasswordReset()">
+                            <i class="ti ti-check me-1"></i>Guardar Password
+                        </button>
+                        <div class="text-center text-muted small mt-3">
+                            Após guardar, poderá fazer login com a nova password
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1300,53 +1339,77 @@
     </div>
 
     <!-- Profile Modal -->
-    <div class="login-overlay" id="profile-overlay" style="display: none;">
-        <div class="login-card" style="max-width: 500px;">
-            <h2 style="margin-bottom: 1.5rem;">⚙️ Perfil de Utilizador</h2>
-
-            <div class="form-group">
-                <label class="form-label" for="profile-username">Username</label>
-                <input type="text" id="profile-username" disabled style="background: var(--bg); cursor: not-allowed;" />
-            </div>
-
-            <div class="form-group">
-                <label class="form-label" for="profile-email">Email</label>
-                <input type="email" id="profile-email" placeholder="seu@email.com" />
-                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                    Necessário para recuperação de password
+    <div class="modal modal-blur fade show" id="profile-overlay" style="display: none; background: rgba(32, 43, 61, 0.85);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white;">
+                    <h5 class="modal-title">
+                        <i class="ti ti-user-cog me-2"></i>Perfil de Utilizador
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" onclick="closeProfileModal()"></button>
                 </div>
-            </div>
+                <div class="modal-body">
+                    <!-- Profile Info Section -->
+                    <div class="mb-4">
+                        <div class="mb-3">
+                            <label class="form-label" for="profile-username">
+                                <i class="ti ti-user me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="profile-username" disabled style="background: #f8f9fa; cursor: not-allowed;" />
+                        </div>
 
-            <div class="btn-group" style="margin-top: 1rem;">
-                <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
-            </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="profile-email">
+                                <i class="ti ti-mail me-1"></i>Email
+                            </label>
+                            <input type="email" class="form-control" id="profile-email" placeholder="seu@email.com" />
+                            <small class="form-hint">
+                                Necessário para recuperação de password
+                            </small>
+                        </div>
 
-            <!-- Change Password Section -->
-            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">🔐 Alterar Password</h3>
+                        <button class="btn btn-primary" onclick="updateProfileEmail()">
+                            <i class="ti ti-device-floppy me-1"></i>Guardar Email
+                        </button>
+                    </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="profile-current-password">Password Atual</label>
-                    <input type="password" id="profile-current-password" placeholder="password atual" />
+                    <!-- Change Password Section -->
+                    <hr class="my-4">
+
+                    <h5 class="mb-3">
+                        <i class="ti ti-lock me-2"></i>Alterar Password
+                    </h5>
+
+                    <div class="mb-3">
+                        <label class="form-label required" for="profile-current-password">
+                            <i class="ti ti-key me-1"></i>Password Atual
+                        </label>
+                        <input type="password" class="form-control" id="profile-current-password" placeholder="password atual" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label required" for="profile-new-password">
+                            <i class="ti ti-key-plus me-1"></i>Nova Password
+                        </label>
+                        <input type="password" class="form-control" id="profile-new-password" placeholder="nova password" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label required" for="profile-new-password-confirm">
+                            <i class="ti ti-checks me-1"></i>Confirmar Nova Password
+                        </label>
+                        <input type="password" class="form-control" id="profile-new-password-confirm" placeholder="confirme a nova password" />
+                    </div>
+
+                    <button class="btn btn-warning" onclick="changePasswordFromProfile()">
+                        <i class="ti ti-lock-access me-1"></i>Alterar Password
+                    </button>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="profile-new-password">Nova Password</label>
-                    <input type="password" id="profile-new-password" placeholder="nova password" />
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeProfileModal()">
+                        <i class="ti ti-x me-1"></i>Fechar
+                    </button>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="profile-new-password-confirm">Confirmar Nova Password</label>
-                    <input type="password" id="profile-new-password-confirm" placeholder="confirme a nova password" />
-                </div>
-
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="changePasswordFromProfile()" style="background: var(--warning);">🔑 Alterar Password</button>
-                </div>
-            </div>
-
-            <div class="btn-group" style="margin-top: 1.5rem;">
-                <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
             </div>
         </div>
     </div>
