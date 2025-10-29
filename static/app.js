@@ -3070,6 +3070,9 @@ window.checkDocs = async function() {
 
             // Render table
             renderDocsTable(allDocs);
+
+            // Update charts in sidebar
+            updateDocumentStatistics(allDocs);
         } else {
             logLine('[DOCS] ❌ Erro: ' + (data.error || 'Erro desconhecido'));
             setStatus('❌ Erro ao carregar documentos', 'error');
@@ -3136,6 +3139,10 @@ window.renderDocsTable = function(docs) {
             </tr>
         `;
     }).join('');
+
+    // Update charts after rendering table
+    console.log('[renderDocsTable] Calling updateDocumentStatistics with', docs.length, 'documents');
+    updateDocumentStatistics(docs);
 };
 
 window.updateDocsStats = function() {
@@ -3176,6 +3183,7 @@ window.filterDocsTable = function() {
     });
 
     renderDocsTable(filtered);
+    updateDocumentStatistics(filtered);
     logLine(`[DOCS] Filtrado: ${filtered.length} de ${allDocs.length} documentos`);
 };
 
@@ -3561,4 +3569,358 @@ window.saveCustomRule = async function() {
         alert('❌ Erro ao guardar regra: ' + e.message);
     }
 };
+
+// =============================================================================
+// Chart.js functions for Documents Statistics Sidebar
+// =============================================================================
+
+// Store chart instances globally to allow updates
+let docTypeChartInstance = null;
+let weekSalesChartInstance = null;
+let customerSalesChartInstance = null;
+let weekDetailMode = false;
+
+// Helper function to format currency in Portuguese style
+function formatEuro(value) {
+    return value.toLocaleString('pt-PT', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }) + ' €';
+}
+
+// Main function to update all document statistics
+window.updateDocumentStatistics = function(documents) {
+    console.log('[Charts] updateDocumentStatistics called');
+    console.log('[Charts] documents parameter:', documents);
+    console.log('[Charts] documents type:', typeof documents);
+    console.log('[Charts] documents length:', documents ? documents.length : 'null/undefined');
+
+    if (!documents || documents.length === 0) {
+        console.log('[Charts] No documents to display - returning early');
+        return;
+    }
+
+    console.log('[Charts] Updating statistics for', documents.length, 'documents');
+    console.log('[Charts] First document sample:', documents[0]);
+
+    updateTopCustomers(documents);
+    updateDocTypeChart(documents);
+    updateWeeklySalesChart(documents);
+    updateCustomerSalesChart(documents);
+
+    console.log('[Charts] All charts updated successfully');
+};
+
+// Update Top 5 Customers list
+function updateTopCustomers(documents) {
+    console.log('[Charts] updateTopCustomers - processing', documents.length, 'documents');
+    const customerTotals = {};
+
+    // Aggregate sales by customer
+    documents.forEach(doc => {
+        if (doc.CustomerID && doc.DocumentStatus === 'N') {
+            const key = doc.CustomerID;
+            if (!customerTotals[key]) {
+                customerTotals[key] = {
+                    name: doc.CustomerName || doc.CustomerID,
+                    total: 0
+                };
+            }
+            customerTotals[key].total += parseFloat(doc.GrossTotal || 0);
+        }
+    });
+
+    console.log('[Charts] updateTopCustomers - found', Object.keys(customerTotals).length, 'unique customers');
+
+    // Sort and get top 5
+    const sorted = Object.entries(customerTotals)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 5);
+
+    const listEl = document.getElementById('top-customers-list');
+    console.log('[Charts] updateTopCustomers - list element found:', !!listEl);
+    if (!listEl) return;
+
+    if (sorted.length === 0) {
+        console.log('[Charts] updateTopCustomers - no customers found');
+        listEl.innerHTML = '<small class="text-muted p-2">Sem dados</small>';
+        return;
+    }
+
+    console.log('[Charts] updateTopCustomers - rendering', sorted.length, 'customers');
+    const badges = ['success', 'primary', 'info', 'warning', 'secondary'];
+
+    listEl.innerHTML = sorted.map((entry, index) => {
+        const customerId = entry[0];
+        const data = entry[1];
+        const badge = badges[index] || 'secondary';
+
+        const badgeHtml = '<span class="badge bg-' + badge + ' me-2">' + (index + 1) + '</span>';
+        const totalBadge = '<span class="badge bg-' + badge + ' rounded-pill">' + formatEuro(data.total) + '</span>';
+
+        return '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">' +
+               '<div>' + badgeHtml + '<strong>' + data.name + '</strong><br>' +
+               '<small class="text-muted">' + customerId + '</small></div>' + totalBadge + '</div>';
+    }).join('');
+}
+
+// Update Document Type Chart (Pie/Doughnut)
+function updateDocTypeChart(documents) {
+    const typeCounts = {};
+
+    documents.forEach(doc => {
+        if (doc.DocumentStatus === 'N') {
+            const type = doc.InvoiceType || 'Outro';
+            typeCounts[type] = (typeCounts[type] || 0) + parseFloat(doc.GrossTotal || 0);
+        }
+    });
+
+    const ctx = document.getElementById('docTypeChart');
+    if (!ctx) return;
+
+    const labels = Object.keys(typeCounts);
+    const data = Object.values(typeCounts);
+
+    const chartData = {
+        labels: labels,
+        datasets: [{
+            data: data,
+            backgroundColor: [
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)',
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    };
+
+    if (docTypeChartInstance) {
+        docTypeChartInstance.destroy();
+    }
+
+    docTypeChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: {
+                            size: 11
+                        },
+                        padding: 8
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + formatEuro(context.parsed);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Update Weekly Sales Chart
+function updateWeeklySalesChart(documents) {
+    const salesByDate = {};
+
+    documents.forEach(doc => {
+        if (doc.DocumentStatus === 'N' && doc.InvoiceDate) {
+            const date = doc.InvoiceDate.split('T')[0];
+            salesByDate[date] = (salesByDate[date] || 0) + parseFloat(doc.GrossTotal || 0);
+        }
+    });
+
+    const sortedDates = Object.keys(salesByDate).sort();
+
+    let labels, data;
+
+    if (weekDetailMode) {
+        labels = sortedDates;
+        data = sortedDates.map(date => salesByDate[date]);
+    } else {
+        const weeklyData = {};
+        sortedDates.forEach(date => {
+            const d = new Date(date);
+            const weekNum = getWeekNumber(d);
+            const year = d.getFullYear();
+            const weekKey = year + '-W' + (weekNum < 10 ? '0' + weekNum : weekNum);
+
+            weeklyData[weekKey] = (weeklyData[weekKey] || 0) + salesByDate[date];
+        });
+
+        labels = Object.keys(weeklyData).sort();
+        data = labels.map(week => weeklyData[week]);
+    }
+
+    const ctx = document.getElementById('weekSalesChart');
+    if (!ctx) return;
+
+    const chartData = {
+        labels: labels,
+        datasets: [{
+            label: weekDetailMode ? 'Vendas Diárias' : 'Vendas Semanais',
+            data: data,
+            backgroundColor: 'rgba(255, 193, 7, 0.6)',
+            borderColor: 'rgba(255, 193, 7, 1)',
+            borderWidth: 2
+        }]
+    };
+
+    if (weekSalesChartInstance) {
+        weekSalesChartInstance.destroy();
+    }
+
+    weekSalesChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return formatEuro(value);
+                        },
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Total: ' + formatEuro(context.parsed.y);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Toggle between weekly aggregate and daily detail
+window.toggleWeekDetail = function() {
+    weekDetailMode = document.getElementById('weekDetailToggle').checked;
+    if (allDocs && allDocs.length > 0) {
+        updateWeeklySalesChart(allDocs);
+    }
+};
+
+// Update Customer Sales Chart (Top 10)
+function updateCustomerSalesChart(documents) {
+    const customerTotals = {};
+
+    documents.forEach(doc => {
+        if (doc.CustomerID && doc.DocumentStatus === 'N') {
+            const key = doc.CustomerID;
+            if (!customerTotals[key]) {
+                customerTotals[key] = {
+                    name: doc.CustomerName || doc.CustomerID,
+                    total: 0
+                };
+            }
+            customerTotals[key].total += parseFloat(doc.GrossTotal || 0);
+        }
+    });
+
+    const sorted = Object.entries(customerTotals)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 10);
+
+    const labels = sorted.map(entry => entry[1].name);
+    const data = sorted.map(entry => entry[1].total);
+
+    const ctx = document.getElementById('customerSalesChart');
+    if (!ctx) return;
+
+    const chartData = {
+        labels: labels,
+        datasets: [{
+            label: 'Vendas',
+            data: data,
+            backgroundColor: 'rgba(23, 162, 184, 0.6)',
+            borderColor: 'rgba(23, 162, 184, 1)',
+            borderWidth: 2
+        }]
+    };
+
+    if (customerSalesChartInstance) {
+        customerSalesChartInstance.destroy();
+    }
+
+    customerSalesChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return formatEuro(value);
+                        },
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                y: {
+                    ticks: {
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Total: ' + formatEuro(context.parsed.x);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Helper function to get ISO week number
+function getWeekNumber(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
 
