@@ -508,7 +508,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=65"></script>
+    <script src="/static/app.js?v=66"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -807,11 +807,12 @@
                     </div>
                 </div>
                 
-                <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px;">
-                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-                        Comando executado:
+                    <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px;">
+                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                            Comando executado:
+                        </div>
+                        <code id="cmd_mask" class="code">(nenhum comando executado)</code>
                     </div>
-                    <code id="cmd_mask" class="code">(nenhum comando executado)</code>
                 </div>
             </div>
 
@@ -843,13 +844,15 @@
             </div>
 
             <div class="card">
-                <h3>🔧 Diagnóstico</h3>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
-                    <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
-                    <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
-                    <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
-                    <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                <div class="card-body">
+                    <h3>🔧 Diagnóstico</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
+                        <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
+                        <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
+                        <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
+                        <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                    </div>
                 </div>
             </div>
         </div> <!-- Fecha panel-app -->
@@ -1007,9 +1010,10 @@
                                 <i class="bi bi-calendar3 me-1"></i>Mês
                             </label>
                             <input type="text" class="form-control" id="history-filter-month" placeholder="Ex: 09" />
-                    </div>
-                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                        <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -1083,79 +1087,84 @@
                     <button class="btn btn-outline-secondary mb-3" onclick="loadCredsStatus()">
                         <i class="bi bi-arrow-clockwise me-2"></i>Atualizar estado
                     </button>
-                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
-                    <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
-                        <div>
-                            <span style="color: var(--text-secondary);">Username:</span>
-                            <code id="creds_user_mask" class="code">(desconhecido)</code>
-                        </div>
-                        <div>
-                            <span style="color: var(--text-secondary);">Última atualização:</span>
-                            <code id="creds_updated" class="code">(desconhecido)</code>
+                    <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
+                        <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
+                            <div>
+                                <span style="color: var(--text-secondary);">Username:</span>
+                                <code id="creds_user_mask" class="code">(desconhecido)</code>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-secondary);">Última atualização:</span>
+                                <code id="creds_updated" class="code">(desconhecido)</code>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="card">
-                <h3>➕ Guardar credenciais por NIF</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Recomendado: guarde a senha AT associada a cada NIF. O sistema escolhe automaticamente a senha correta baseado no NIF do XML.
-                </p>
-                <div class="grid grid-2">
-                    <div class="form-group">
-                        <label class="form-label">NIF</label>
-                        <input type="text" id="nif_ident" placeholder="123456789" />
+                <div class="card-body">
+                    <h3>➕ Guardar credenciais por NIF</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                        Recomendado: guarde a senha AT associada a cada NIF. O sistema escolhe automaticamente a senha correta baseado no NIF do XML.
+                    </p>
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">NIF</label>
+                            <input type="text" id="nif_ident" placeholder="123456789" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Senha AT</label>
+                            <input type="password" id="nif_pass" placeholder="••••••••" />
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Senha AT</label>
-                        <input type="password" id="nif_pass" placeholder="••••••••" />
+                    <div class="btn-group">
+                        <button class="btn" onclick="saveNifEntry()">💾 Guardar NIF</button>
+                        <button class="btn btn-secondary" onclick="loadNifEntries()">📋 Listar NIFs guardados</button>
                     </div>
-                </div>
-                <div class="btn-group">
-                    <button class="btn" onclick="saveNifEntry()">💾 Guardar NIF</button>
-                    <button class="btn btn-secondary" onclick="loadNifEntries()">📋 Listar NIFs guardados</button>
                 </div>
             </div>
 
             <div class="card">
-                <div class="log-header">
-                    <h3>📋 NIFs guardados</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="loadNifEntriesTable()">🔄 Atualizar</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                    Tabela editável com todas as credenciais guardadas. Clique para editar ou eliminar.
-                </p>
+                <div class="card-body">
+                    <div class="log-header">
+                        <h3>📋 NIFs guardados</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="loadNifEntriesTable()">🔄 Atualizar</button>
+                    </div>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                        Tabela editável com todas as credenciais guardadas. Clique para editar ou eliminar.
+                    </p>
 
-                <!-- Loading state -->
-                <div id="creds-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
-                    <div>A carregar credenciais...</div>
-                </div>
+                    <!-- Loading state -->
+                    <div id="creds-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
+                        <div>A carregar credenciais...</div>
+                    </div>
 
-                <!-- Empty state -->
-                <div id="creds-empty" style="display: block; text-align: center; padding: 3rem; color: var(--text-secondary);">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
-                    <h4>Nenhuma credencial guardada</h4>
-                    <p>Adicione credenciais usando o formulário acima.</p>
-                </div>
+                    <!-- Empty state -->
+                    <div id="creds-empty" style="display: block; text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+                        <h4>Nenhuma credencial guardada</h4>
+                        <p>Adicione credenciais usando o formulário acima.</p>
+                    </div>
 
-                <!-- Results table -->
-                <div id="creds-results" style="display: none;">
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                            <thead>
-                                <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
-                                    <th style="padding: 0.75rem; text-align: left;">NIF</th>
-                                    <th style="padding: 0.75rem; text-align: left;">Password AT</th>
-                                    <th style="padding: 0.75rem; text-align: left;">Última Atualização</th>
-                                    <th style="padding: 0.75rem; text-align: center;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="creds-table-body">
-                                <!-- Populated by JavaScript -->
-                            </tbody>
-                        </table>
+                    <!-- Results table -->
+                    <div id="creds-results" style="display: none;">
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
+                                        <th style="padding: 0.75rem; text-align: left;">NIF</th>
+                                        <th style="padding: 0.75rem; text-align: left;">Password AT</th>
+                                        <th style="padding: 0.75rem; text-align: left;">Última Atualização</th>
+                                        <th style="padding: 0.75rem; text-align: center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creds-table-body">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
