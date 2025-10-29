@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SAFT Doctor • Validador</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -147,7 +155,7 @@
             display: none;
         }
         .tabpanel.active {
-            display: block;
+            display: block !important;
             animation: fadeIn 0.3s;
         }
         @keyframes fadeIn {
@@ -273,7 +281,7 @@
         }
         pre {
             background: #1e293b;
-            color: #e2e8f0;
+            color: #ffffff;
             padding: 1rem;
             border-radius: 8px;
             overflow-x: auto;
@@ -502,195 +510,272 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=51"></script>
+    <script src="/static/app.js?v=71"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
-    <nav class="navbar">
-        <div class="navbar-brand">
-            🩺 SAFT Doctor
-        </div>
-        <div class="navbar-user">
-            <div class="user-info">
-                <span>👤</span>
-                <span id="navbar-username">Não autenticado</span>
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-file-earmark-medical me-2 fs-4"></i>
+                <strong>SAFT Doctor</strong>
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-light text-dark me-3 px-3 py-2">
+                    <i class="bi bi-person-circle me-1"></i>
+                    <span id="navbar-username">Não autenticado</span>
+                </span>
+                <button class="btn btn-sm btn-outline-light me-2" onclick="showProfileModal()" id="btn-profile" style="display: none;">
+                    <i class="bi bi-gear-fill me-1"></i>Perfil
+                </button>
+                <button class="btn btn-sm btn-outline-light" onclick="logout()" id="btn-logout" style="display: none;">
+                    <i class="bi bi-box-arrow-right me-1"></i>Sair
+                </button>
             </div>
-            <button class="btn-logout" onclick="showProfileModal()" id="btn-profile" style="display: none; margin-right: 0.5rem;">
-                ⚙️ Perfil
-            </button>
-            <button class="btn-logout" onclick="logout()" id="btn-logout" style="display: none;">
-                Sair
-            </button>
         </div>
     </nav>
 
-    <!-- Login overlay (aparece quando não está autenticado) -->
-    <div class="login-overlay" id="login-overlay">
-        <div class="login-card">
-            <h2 style="margin-bottom: 1.5rem;">🔐 Autenticação</h2>
+    <!-- Login Modal (Bootstrap 5) -->
+    <div class="modal fade show" id="login-overlay" style="display: none; background: rgba(0, 0, 0, 0.7);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-lock me-2"></i>Autenticação
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <!-- Tabs para Login / Registar -->
+                    <ul class="nav nav-pills nav-fill mb-4">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="login-tab-btn" onclick="showAuthTab('login')">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="register-tab-btn" onclick="showAuthTab('register')">
+                                <i class="bi bi-person-plus me-2"></i>Registar
+                            </button>
+                        </li>
+                    </ul>
 
-            <!-- Tabs para Login / Registar -->
-            <div class="btn-group" style="margin-bottom: 1.5rem;">
-                <button class="btn" id="login-tab-btn" onclick="showAuthTab('login')" style="flex: 1;">🔓 Login</button>
-                <button class="btn" id="register-tab-btn" onclick="showAuthTab('register')" style="flex: 1; background: var(--text-secondary);">✍️ Registar</button>
-            </div>
-
-            <!-- Login Form -->
-            <div id="login-form" style="display: block;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="login_user" placeholder="dev" value="dev" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" id="login_pass" placeholder="dev" value="dev" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="doLogin()">🔓 Entrar</button>
-                </div>
-                <div style="margin-top: 1rem; text-align: center;">
-                    <button type="button" onclick="showAuthTab('password-reset')" style="background: none; border: none; font-size: 0.875rem; color: var(--primary); text-decoration: underline; cursor: pointer; padding: 0;">
-                        Esqueceu a password?
-                    </button>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Utilize <strong>dev/dev</strong> para acesso rápido
-                </div>
-            </div>
-
-            <!-- Register Form -->
-            <div id="register-form" style="display: none;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="register_user" placeholder="username" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email (opcional)</label>
-                    <input type="email" id="register_email" placeholder="seu@email.com" />
-                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                        Recomendado para recuperação de password
+                    <!-- Login Form -->
+                    <div id="login-form" style="display: block;">
+                        <div class="mb-3">
+                            <label class="form-label" for="login_user">
+                                <i class="bi bi-person me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="login_user" placeholder="dev" value="dev" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="login_pass">
+                                <i class="bi bi-key me-1"></i>Password
+                            </label>
+                            <input type="password" class="form-control" id="login_pass" placeholder="dev" value="dev" />
+                        </div>
+                        <button class="btn btn-primary w-100 mb-3" onclick="doLogin()">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
+                        </button>
+                        <div class="text-center mb-3">
+                            <button type="button" class="btn btn-link btn-sm" onclick="showAuthTab('password-reset')">
+                                Esqueceu a password?
+                            </button>
+                        </div>
+                        <div class="alert alert-info py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Utilize <strong>dev/dev</strong> para acesso rápido
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" id="register_pass" placeholder="password" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Confirmar Password</label>
-                    <input type="password" id="register_pass_confirm" placeholder="confirme a password" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="doRegister()">✍️ Criar Conta</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Após registar, faça login com as suas credenciais
-                </div>
-            </div>
 
-            <!-- Password Reset Request Form -->
-            <div id="password-reset-form" style="display: none;">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" id="reset_username" placeholder="username" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="requestPasswordReset()">📧 Enviar Email</button>
-                    <button class="btn" onclick="showAuthTab('login')" style="background: var(--text-secondary);">Voltar</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Receberá um email com instruções para recuperar a password
-                </div>
-            </div>
+                    <!-- Register Form -->
+                    <div id="register-form" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label" for="register_user">
+                                <i class="bi bi-person me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="register_user" placeholder="username" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="register_email">
+                                <i class="bi bi-envelope me-1"></i>Email (opcional)
+                            </label>
+                            <input type="email" class="form-control" id="register_email" placeholder="seu@email.com" />
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>Recomendado para recuperação de password
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="register_pass">
+                                <i class="bi bi-key me-1"></i>Password
+                            </label>
+                            <input type="password" class="form-control" id="register_pass" placeholder="password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="register_pass_confirm">
+                                <i class="bi bi-key-fill me-1"></i>Confirmar Password
+                            </label>
+                            <input type="password" class="form-control" id="register_pass_confirm" placeholder="confirme a password" />
+                        </div>
+                        <button class="btn btn-success w-100 mb-3" onclick="doRegister()">
+                            <i class="bi bi-person-plus me-2"></i>Criar Conta
+                        </button>
+                        <div class="alert alert-secondary py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Após registar, faça login com as suas credenciais
+                        </div>
+                    </div>
 
-            <!-- New Password Form (shown when URL has reset_token) -->
-            <div id="new-password-form" style="display: none;">
-                <h3 style="margin-bottom: 1rem; color: var(--primary);">Criar Nova Password</h3>
-                <div class="form-group">
-                    <label class="form-label">Nova Password</label>
-                    <input type="password" id="new_password" placeholder="nova password" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Confirmar Password</label>
-                    <input type="password" id="new_password_confirm" placeholder="confirme a nova password" />
-                </div>
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="confirmPasswordReset()">✅ Guardar Password</button>
-                </div>
-                <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                    Após guardar, poderá fazer login com a nova password
+                    <!-- Password Reset Request Form -->
+                    <div id="password-reset-form" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label" for="reset_username">
+                                <i class="bi bi-person me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control" id="reset_username" placeholder="username" />
+                        </div>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-primary" onclick="requestPasswordReset()">
+                                <i class="bi bi-envelope me-2"></i>Enviar Email
+                            </button>
+                            <button class="btn btn-secondary" onclick="showAuthTab('login')">
+                                <i class="bi bi-arrow-left me-2"></i>Voltar
+                            </button>
+                        </div>
+                        <div class="alert alert-info py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Receberá um email com instruções para recuperar a password
+                        </div>
+                    </div>
+
+                    <!-- New Password Form (shown when URL has reset_token) -->
+                    <div id="new-password-form" style="display: none;">
+                        <h5 class="text-primary mb-3">
+                            <i class="bi bi-key me-2"></i>Criar Nova Password
+                        </h5>
+                        <div class="mb-3">
+                            <label class="form-label" for="new_password">
+                                <i class="bi bi-key me-1"></i>Nova Password
+                            </label>
+                            <input type="password" class="form-control" id="new_password" placeholder="nova password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="new_password_confirm">
+                                <i class="bi bi-key-fill me-1"></i>Confirmar Password
+                            </label>
+                            <input type="password" class="form-control" id="new_password_confirm" placeholder="confirme a nova password" />
+                        </div>
+                        <button class="btn btn-success w-100 mb-3" onclick="confirmPasswordReset()">
+                            <i class="bi bi-check-circle me-2"></i>Guardar Password
+                        </button>
+                        <div class="alert alert-secondary py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Após guardar, poderá fazer login com a nova password
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="container" style="padding-bottom: 4rem;">
-        <div style="margin-bottom: 1rem;">
-            <h1>Validador profissional de ficheiros SAFT-T (PT)</h1>
+        <div class="mb-4 mt-3">
+            <h1 class="display-6 fw-bold">
+                <i class="bi bi-file-earmark-check text-primary me-2"></i>
+                Validador profissional de ficheiros SAFT-T (PT)
+            </h1>
         </div>
 
-        <div class="tabs">
-            <button class="tab active" data-tab="app" onclick="showTab('app')">📄 Validação</button>
-            <button class="tab" data-tab="docs" onclick="showTab('docs')">📋 Documentos</button>
-            <button class="tab" data-tab="history" onclick="showTab('history')">📜 Histórico</button>
-            <button class="tab" data-tab="creds" onclick="showTab('creds')">🔐 Credenciais AT</button>
-            <button class="tab" data-tab="config" onclick="showTab('config')">⚙️ Configuração</button>
-            <button class="tab" id="admin-tab" data-tab="admin" onclick="showTab('admin')" style="display: none;">👑 Admin</button>
-        </div>
-
-        <div class="checkbox-label" style="margin-bottom: 1.5rem;">
-            <input type="checkbox" id="hb" />
-            <span>Auto-reload quando o backend reinicia (opcional)</span>
-        </div>
+        <!-- Bootstrap 5 Nav Tabs -->
+        <ul class="nav nav-tabs nav-fill mb-4">
+            <li class="nav-item">
+                <button class="nav-link active" data-tab="app" onclick="showTab('app')" type="button">
+                    <i class="bi bi-file-earmark-arrow-up me-2"></i>Validação
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-tab="docs" onclick="showTab('docs')" type="button">
+                    <i class="bi bi-file-earmark-text me-2"></i>Documentos
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-tab="history" onclick="showTab('history')" type="button">
+                    <i class="bi bi-clock-history me-2"></i>Histórico
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-tab="creds" onclick="showTab('creds')" type="button">
+                    <i class="bi bi-shield-lock me-2"></i>Credenciais AT
+                </button>
+            </li>
+            <li class="nav-item" id="config-tab-li" style="display: none;">
+                <button class="nav-link" data-tab="config" onclick="showTab('config')" type="button">
+                    <i class="bi bi-gear me-2"></i>Configuração
+                </button>
+            </li>
+            <li class="nav-item" id="admin-tab-li" style="display: none;">
+                <button class="nav-link" id="admin-tab" data-tab="admin" onclick="showTab('admin')" type="button">
+                    <i class="bi bi-person-badge me-2"></i>Admin
+                </button>
+            </li>
+        </ul>
 
         <!-- TAB: Validação -->
         <div id="panel-app" class="tabpanel active">
-            <div class="card">
-                <h3>📤 Validar ficheiro SAFT</h3>
-                <div class="form-group">
-                    <label class="form-label">Escolha um ficheiro XML</label>
-                    <input type="file" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-file-earmark-arrow-up me-2"></i>Validar ficheiro SAFT
+                    </h5>
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Workflow de validação</label>
-                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border-radius: 6px; font-size: 0.875rem; color: #0d47a1;">
-                        <strong>📋 Processo em 2 fases:</strong><br>
-                        1️⃣ <strong>Validar</strong>: Verifica sintaxe XML<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Com credenciais AT: output completo + estatísticas<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;• Sem credenciais: validação básica de sintaxe<br>
-                        2️⃣ <strong>Enviar</strong>: Submete à AT (requer credenciais obrigatórias)
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold" for="file">
+                            <i class="bi bi-file-earmark-code me-2"></i>Escolha um ficheiro XML
+                        </label>
+                        <input type="file" class="form-control" id="file" accept=".xml,text/xml" onchange="onFileChange(event)" />
                     </div>
-                </div>
 
-                <!-- Fase 1: Validação -->
-                <div id="validation-phase">
-                    <div class="btn-group">
-                        <button class="btn" id="btn-jar" onclick="validateSmart()">
-                            <span>🔍</span> 1. Validar Ficheiro
-                        </button>
-                        <button class="btn" id="btn-validate" onclick="validate()">
-                            <span>✓</span> Validação básica
-                        </button>
-                        <button class="btn btn-info" onclick="checkDocs()">
-                            <span>📄</span> Checkar os Docs
-                        </button>
-                        <button class="btn" onclick="presignUpload()">
-                            <span>☁️</span> Upload via Presign
-                        </button>
-                        <button class="btn" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
-                            <span>☁️</span> Validar do B2
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewJarCommand('validar')">
-                            <span>👁️</span> Ver comando
-                        </button>
+                    <div class="alert alert-info mb-4">
+                        <h6 class="alert-heading">
+                            <i class="bi bi-info-circle me-2"></i>Processo em 2 fases
+                        </h6>
+                        <p class="mb-2"><strong>1️⃣ Validar:</strong> Verifica sintaxe XML</p>
+                        <ul class="mb-2 small">
+                            <li>Com credenciais AT: output completo + estatísticas</li>
+                            <li>Sem credenciais: validação básica de sintaxe</li>
+                        </ul>
+                        <p class="mb-0"><strong>2️⃣ Enviar:</strong> Submete à AT (requer credenciais obrigatórias)</p>
                     </div>
-                    <div style="margin-top: 0.75rem; padding: 0.6rem; background: var(--bg); border-radius: 8px; font-size: 0.9rem;">
-                        <span style="color: var(--text-secondary);">object_key:</span>
-                        <code id="object_key" class="code">(nenhum)</code>
-                        <span style="margin-left: 1rem; color: var(--text-secondary);">ficheiro:</span>
-                        <code id="object_key_name" class="code">(desconhecido)</code>
+
+                    <!-- Fase 1: Validação -->
+                    <div id="validation-phase">
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-primary" id="btn-jar" onclick="validateSmart()">
+                                <i class="bi bi-search me-2"></i>1. Validar Ficheiro
+                            </button>
+                            <button class="btn btn-outline-primary" id="btn-validate" onclick="validate()">
+                                <i class="bi bi-check-circle me-2"></i>Validação básica
+                            </button>
+                            <button class="btn btn-info" onclick="checkDocs()">
+                                <i class="bi bi-file-text me-2"></i>Checkar os Docs
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="presignUpload()">
+                                <i class="bi bi-cloud-upload me-2"></i>Upload via Presign
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btn-b2" onclick="validateFromB2()" title="Usa o object_key carregado via 'Upload via Presign'">
+                                <i class="bi bi-cloud-check me-2"></i>Validar do B2
+                            </button>
+                            <button class="btn btn-outline-dark" onclick="previewJarCommand('validar')">
+                                <i class="bi bi-eye me-2"></i>Ver comando
+                            </button>
+                        </div>
+                        <div class="alert alert-secondary py-2 small">
+                            <span class="text-muted">object_key:</span>
+                            <code id="object_key" class="text-primary">(nenhum)</code>
+                            <span class="text-muted ms-3">ficheiro:</span>
+                            <code id="object_key_name" class="text-primary">(desconhecido)</code>
+                        </div>
                     </div>
-                </div>
                     <div id="upload-progress" style="display:none; margin-top: 0.5rem;">
                         <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Upload:</div>
                         <div style="height: 8px; background: #e5e7eb; border-radius: 6px; overflow: hidden;">
@@ -717,67 +802,94 @@
                     </div>
                 </div>
                 
-                <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px;">
-                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-                        Comando executado:
+                    <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 8px;">
+                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                            Comando executado:
+                        </div>
+                        <code id="cmd_mask" class="code">(nenhum comando executado)</code>
                     </div>
-                    <code id="cmd_mask" class="code">(nenhum comando executado)</code>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-terminal me-2"></i>Log de execução
+                        </h5>
+                        <button class="btn btn-outline-light btn-sm" onclick="clearLog()">
+                            <i class="bi bi-x-circle me-1"></i>Limpar log
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-file-earmark-check me-2"></i>Resultado
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
                 </div>
             </div>
 
             <div class="card">
-                <div class="log-header">
-                    <h3>� Log de execução</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="clearLog()">Limpar log</button>
-                </div>
-                <pre id="log" style="min-height: 160px;" aria-label="Log de execução">(log vazio)</pre>
-            </div>
-
-            <div class="card">
-                <div class="log-header">
-                    <h3>� Resultado</h3>
-                </div>
-                <pre id="out" style="min-height: 200px;">(aguardando validação...)</pre>
-            </div>
-
-            <div class="card">
-                <h3>🔧 Diagnóstico</h3>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
-                    <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
-                    <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
-                    <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
-                    <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                <div class="card-body">
+                    <h3>🔧 Diagnóstico</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick="checkJavaVersion()">Java version</button>
+                        <button class="btn btn-secondary" onclick="checkJarStatus()">Check JAR</button>
+                        <button class="btn btn-secondary" onclick="runJarCheck()">Run JAR check</button>
+                        <button class="btn btn-secondary" onclick="diagConnections()">Diag (/diag)</button>
+                        <button class="btn btn-secondary" onclick="window.showIssuesPopup([{code:'TEST',message:'Teste de popup',customer_id:'TEST001',value:'CVE',suggestion:'CV',location:{line:1,column:1,context:'<Country>CVE</Country>'}}])">🧪 Testar Popup</button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </div> <!-- Fecha panel-app -->
 
         <!-- TAB: Documentos -->
         <div id="panel-docs" class="tabpanel">
-            <div class="card">
-                <div class="log-header">
-                    <h3>📋 Documentos no Ficheiro SAFT</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToCSV()">📥 Exportar CSV</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportDocsToExcel()">📊 Exportar Excel</button>
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-files me-2"></i>Documentos no Ficheiro SAFT
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light" onclick="exportDocsToCSV()">
+                            <i class="bi bi-filetype-csv me-1"></i>CSV
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportDocsToExcel()">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                        </button>
                     </div>
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
-                </p>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Main Content (Left) -->
+                        <div class="col-lg-8">
+                            <p class="text-muted mb-3">
+                                Lista de todos os documentos (faturas, notas de crédito, etc) encontrados no ficheiro XML.
+                            </p>
 
-                <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="form-group">
-                        <label class="form-label">Pesquisar</label>
-                        <input type="text" id="docs-search" placeholder="Número, Cliente, Valor..."
-                               oninput="filterDocsTable()"
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
+                            <!-- Filtros -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-search me-1"></i>Pesquisar
+                        </label>
+                        <input type="text" class="form-control" id="docs-search" placeholder="Número, Cliente, Valor..."
+                               oninput="filterDocsTable()" />
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Tipo Documento</label>
-                        <select id="docs-filter-type" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-file-text me-1"></i>Tipo Documento
+                        </label>
+                        <select class="form-select" id="docs-filter-type" onchange="filterDocsTable()">
                             <option value="">Todos</option>
                             <option value="FT">Fatura (FT)</option>
                             <option value="NC">Nota Crédito (NC)</option>
@@ -786,10 +898,11 @@
                             <option value="GT">Guia Transporte (GT)</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <select id="docs-filter-status" onchange="filterDocsTable()"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            <i class="bi bi-check-circle me-1"></i>Status
+                        </label>
+                        <select class="form-select" id="docs-filter-status" onchange="filterDocsTable()">
                             <option value="">Todos</option>
                             <option value="N">Normal (N)</option>
                             <option value="A">Anulado (A)</option>
@@ -846,47 +959,136 @@
                     </table>
                 </div>
 
-                <!-- Loading indicator -->
-                <div id="docs-loading" style="display:none; text-align:center; padding:2rem;">
-                    <div style="display:inline-block; width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite;"></div>
-                    <div style="margin-top:1rem; color:#64748b;">A carregar documentos...</div>
+                            <!-- Loading indicator -->
+                            <div id="docs-loading" style="display:none; text-align:center; padding:2rem;">
+                                <div style="display:inline-block; width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite;"></div>
+                                <div style="margin-top:1rem; color:#64748b;">A carregar documentos...</div>
+                            </div>
+                        </div> <!-- fecha col-lg-8 -->
+
+                        <!-- Sidebar (Right) - Statistics -->
+                        <div class="col-lg-4">
+                            <div style="max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 8px;">
+
+                                <!-- Accordion for Charts -->
+                                <div class="accordion" id="chartsAccordion">
+
+                                    <!-- Top 5 Customers -->
+                                    <div class="accordion-item border-0 shadow-sm mb-2">
+                                        <h2 class="accordion-header" id="headingCustomers">
+                                            <button class="accordion-button bg-success text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCustomers" aria-expanded="true" aria-controls="collapseCustomers">
+                                                <i class="bi bi-star-fill me-2"></i>Top 5 Clientes
+                                            </button>
+                                        </h2>
+                                        <div id="collapseCustomers" class="accordion-collapse collapse show" aria-labelledby="headingCustomers" data-bs-parent="#chartsAccordion">
+                                            <div class="accordion-body p-2">
+                                                <div id="top-customers-list" class="list-group list-group-flush">
+                                                    <small class="text-muted p-2">Sem dados</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Document Type Distribution -->
+                                    <div class="accordion-item border-0 shadow-sm mb-2">
+                                        <h2 class="accordion-header" id="headingDocType">
+                                            <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDocType" aria-expanded="false" aria-controls="collapseDocType">
+                                                <i class="bi bi-pie-chart-fill me-2"></i>Por Tipo de Documento
+                                            </button>
+                                        </h2>
+                                        <div id="collapseDocType" class="accordion-collapse collapse" aria-labelledby="headingDocType" data-bs-parent="#chartsAccordion">
+                                            <div class="accordion-body">
+                                                <canvas id="docTypeChart" height="150"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sales by Week -->
+                                    <div class="accordion-item border-0 shadow-sm mb-2">
+                                        <h2 class="accordion-header" id="headingWeekSales">
+                                            <button class="accordion-button collapsed bg-warning text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseWeekSales" aria-expanded="false" aria-controls="collapseWeekSales">
+                                                <i class="bi bi-calendar-week me-2"></i>Vendas por Semana
+                                            </button>
+                                        </h2>
+                                        <div id="collapseWeekSales" class="accordion-collapse collapse" aria-labelledby="headingWeekSales" data-bs-parent="#chartsAccordion">
+                                            <div class="accordion-body">
+                                                <div class="form-check form-switch mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="weekDetailToggle" onchange="toggleWeekDetail()">
+                                                    <label class="form-check-label small" for="weekDetailToggle">
+                                                        Mostrar por dia
+                                                    </label>
+                                                </div>
+                                                <canvas id="weekSalesChart" height="180"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sales by Customer (Top 10) -->
+                                    <div class="accordion-item border-0 shadow-sm mb-2">
+                                        <h2 class="accordion-header" id="headingCustomerSales">
+                                            <button class="accordion-button collapsed bg-info text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCustomerSales" aria-expanded="false" aria-controls="collapseCustomerSales">
+                                                <i class="bi bi-people-fill me-2"></i>Vendas por Cliente (Top 10)
+                                            </button>
+                                        </h2>
+                                        <div id="collapseCustomerSales" class="accordion-collapse collapse" aria-labelledby="headingCustomerSales" data-bs-parent="#chartsAccordion">
+                                            <div class="accordion-body">
+                                                <canvas id="customerSalesChart" height="200"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div> <!-- fecha accordion -->
+                            </div>
+                        </div> <!-- fecha col-lg-4 -->
+                    </div> <!-- fecha row -->
                 </div>
             </div>
         </div>
 
         <!-- TAB: Histórico -->
         <div id="panel-history" class="tabpanel">
-            <div class="card">
-                <div class="log-header">
-                    <h3>📜 Histórico de Validações</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Atualizar</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportHistoryToExcel()">📊 Exportar Excel</button>
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history me-2"></i>Histórico de Validações
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light" onclick="loadHistory()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportHistoryToExcel()">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                        </button>
                     </div>
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
-                </p>
-                
-                <!-- Filtros -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="form-group">
-                        <label class="form-label">Filtrar por NIF</label>
-                        <input type="text" id="history-filter-nif" placeholder="Ex: 501789227" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Ano</label>
-                        <input type="text" id="history-filter-year" placeholder="Ex: 2025" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Mês</label>
-                        <input type="text" id="history-filter-month" placeholder="Ex: 09" 
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;" />
-                    </div>
-                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                        <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Todas as validações bem-sucedidas são automaticamente guardadas e os ficheiros XML arquivados no Backblaze B2.
+                    </p>
+
+                    <!-- Filtros -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-nif">
+                                <i class="bi bi-building me-1"></i>Filtrar por NIF
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-nif" placeholder="Ex: 501789227" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-year">
+                                <i class="bi bi-calendar me-1"></i>Ano
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-year" placeholder="Ex: 2025" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="history-filter-month">
+                                <i class="bi bi-calendar3 me-1"></i>Mês
+                            </label>
+                            <input type="text" class="form-control" id="history-filter-month" placeholder="Ex: 09" />
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button class="btn" onclick="filterHistory()" style="width: 100%;">🔍 Filtrar</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -946,104 +1148,147 @@
 
         <!-- TAB: Credenciais -->
         <div id="panel-creds" class="tabpanel">
-            <div class="card">
-                <h3>🔐 Gestão de credenciais AT</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
-                </p>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" onclick="loadCredsStatus()">🔄 Atualizar estado</button>
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-warning">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-shield-lock me-2"></i>Gestão de credenciais AT
+                    </h5>
                 </div>
-                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
-                    <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
-                        <div>
-                            <span style="color: var(--text-secondary);">Username:</span>
-                            <code id="creds_user_mask" class="code">(desconhecido)</code>
-                        </div>
-                        <div>
-                            <span style="color: var(--text-secondary);">Última atualização:</span>
-                            <code id="creds_updated" class="code">(desconhecido)</code>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-shield-check me-2"></i>
+                        As credenciais são guardadas <strong>encriptadas</strong> no servidor e associadas ao seu utilizador.
+                    </div>
+                    <button class="btn btn-outline-secondary mb-3" onclick="loadCredsStatus()">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Atualizar estado
+                    </button>
+                    <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px;">
+                        <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
+                            <div>
+                                <span style="color: var(--text-secondary);">Username:</span>
+                                <code id="creds_user_mask" class="code">(desconhecido)</code>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-secondary);">Última atualização:</span>
+                                <code id="creds_updated" class="code">(desconhecido)</code>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="card">
-                <h3>➕ Guardar credenciais por NIF</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Recomendado: guarde a senha AT associada a cada NIF. O sistema escolhe automaticamente a senha correta baseado no NIF do XML.
-                </p>
-                <div class="grid grid-2">
-                    <div class="form-group">
-                        <label class="form-label">NIF</label>
-                        <input type="text" id="nif_ident" placeholder="123456789" />
+                <div class="card-body">
+                    <h3>➕ Guardar credenciais por NIF</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                        Recomendado: guarde a senha AT associada a cada NIF. O sistema escolhe automaticamente a senha correta baseado no NIF do XML.
+                    </p>
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">NIF</label>
+                            <input type="text" id="nif_ident" placeholder="123456789" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Senha AT</label>
+                            <input type="password" id="nif_pass" placeholder="••••••••" />
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Senha AT</label>
-                        <input type="password" id="nif_pass" placeholder="••••••••" />
+                    <div class="btn-group">
+                        <button class="btn" onclick="saveNifEntry()">💾 Guardar NIF</button>
+                        <button class="btn btn-secondary" onclick="loadNifEntries()">📋 Listar NIFs guardados</button>
                     </div>
-                </div>
-                <div class="btn-group">
-                    <button class="btn" onclick="saveNifEntry()">💾 Guardar NIF</button>
-                    <button class="btn btn-secondary" onclick="loadNifEntries()">📋 Listar NIFs guardados</button>
                 </div>
             </div>
 
             <div class="card">
-                <div class="log-header">
-                    <h3>📋 NIFs guardados</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="loadNifEntriesTable()">🔄 Atualizar</button>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                    Tabela editável com todas as credenciais guardadas. Clique para editar ou eliminar.
-                </p>
+                <div class="card-body">
+                    <div class="log-header">
+                        <h3>📋 NIFs guardados</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="loadNifEntriesTable()">🔄 Atualizar</button>
+                    </div>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                        Tabela editável com todas as credenciais guardadas. Clique para editar ou eliminar.
+                    </p>
 
-                <!-- Loading state -->
-                <div id="creds-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
-                    <div>A carregar credenciais...</div>
-                </div>
+                    <!-- Loading state -->
+                    <div id="creds-loading" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
+                        <div>A carregar credenciais...</div>
+                    </div>
 
-                <!-- Empty state -->
-                <div id="creds-empty" style="display: block; text-align: center; padding: 3rem; color: var(--text-secondary);">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
-                    <h4>Nenhuma credencial guardada</h4>
-                    <p>Adicione credenciais usando o formulário acima.</p>
-                </div>
+                    <!-- Empty state -->
+                    <div id="creds-empty" style="display: block; text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+                        <h4>Nenhuma credencial guardada</h4>
+                        <p>Adicione credenciais usando o formulário acima.</p>
+                    </div>
 
-                <!-- Results table -->
-                <div id="creds-results" style="display: none;">
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                            <thead>
-                                <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
-                                    <th style="padding: 0.75rem; text-align: left;">NIF</th>
-                                    <th style="padding: 0.75rem; text-align: left;">Password AT</th>
-                                    <th style="padding: 0.75rem; text-align: left;">Última Atualização</th>
-                                    <th style="padding: 0.75rem; text-align: center;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="creds-table-body">
-                                <!-- Populated by JavaScript -->
-                            </tbody>
-                        </table>
+                    <!-- Results table -->
+                    <div id="creds-results" style="display: none;">
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background: var(--bg); border-bottom: 2px solid var(--border);">
+                                        <th style="padding: 0.75rem; text-align: left;">NIF</th>
+                                        <th style="padding: 0.75rem; text-align: left;">Password AT</th>
+                                        <th style="padding: 0.75rem; text-align: left;">Última Atualização</th>
+                                        <th style="padding: 0.75rem; text-align: center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creds-table-body">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- TAB: Configuração -->
+        <!-- TAB: Configuração (Sysadmin only) -->
         <div id="panel-config" class="tabpanel">
-            <div class="card">
-                <h3>⚙️ Instalar FACTEMICLI.jar</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
-                </p>
-                <div class="form-group">
-                    <label class="form-label">Object Key (B2/S3)</label>
-                    <input type="text" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+            <!-- Auto-reload Option -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Auto-reload
+                    </h5>
                 </div>
-                <button class="btn" onclick="installJar()">📥 Instalar JAR</button>
+                <div class="card-body">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="hb">
+                        <label class="form-check-label" for="hb">
+                            Auto-reload quando o backend reinicia (opcional)
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Quando ativado, a página recarrega automaticamente quando o servidor reinicia
+                    </small>
+                </div>
+            </div>
+
+            <!-- FACTEMICLI.jar Installation -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-gear me-2"></i>Instalar FACTEMICLI.jar
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Configure o acesso ao ficheiro FACTEMICLI.jar oficial da Autoridade Tributária.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label" for="jar_key">
+                            <i class="bi bi-cloud me-1"></i>Object Key (B2/S3)
+                        </label>
+                        <input type="text" class="form-control" id="jar_key" placeholder="pt/tools/FACTEMICLI.jar" value="pt/tools/FACTEMICLI.jar" />
+                    </div>
+                    <button class="btn btn-primary" onclick="installJar()">
+                        <i class="bi bi-download me-2"></i>Instalar JAR
+                    </button>
+                </div>
             </div>
 
             <div class="card">
@@ -1078,16 +1323,23 @@
 
         <!-- TAB: Admin (Sysadmin only) -->
         <div id="panel-admin" class="tabpanel">
-            <div class="card">
-                <h3>👑 Painel de Administração (Sysadmin)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            <div class="alert alert-warning shadow-sm">
+                <h5 class="alert-heading">
+                    <i class="bi bi-person-badge me-2"></i>Painel de Administração (Sysadmin)
+                </h5>
+                <p class="mb-0">
                     Configuração de sistema acessível apenas para administradores.
                 </p>
             </div>
 
-            <div class="card">
-                <h3>📧 Configuração SMTP (ServerSMTP.com)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-envelope-at me-2"></i>Configuração SMTP (ServerSMTP.com)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
                     Configure o servidor SMTP para envio de emails (recuperação de password, notificações).
                 </p>
 
@@ -1158,54 +1410,75 @@
         <div class="status-text" id="status">Pronto para validar ficheiros SAFT-T</div>
     </div>
 
-    <!-- Profile Modal -->
-    <div class="login-overlay" id="profile-overlay" style="display: none;">
-        <div class="login-card" style="max-width: 500px;">
-            <h2 style="margin-bottom: 1.5rem;">⚙️ Perfil de Utilizador</h2>
-
-            <div class="form-group">
-                <label class="form-label" for="profile-username">Username</label>
-                <input type="text" id="profile-username" disabled style="background: var(--bg); cursor: not-allowed;" />
-            </div>
-
-            <div class="form-group">
-                <label class="form-label" for="profile-email">Email</label>
-                <input type="email" id="profile-email" placeholder="seu@email.com" />
-                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                    Necessário para recuperação de password
+    <!-- Profile Modal (Bootstrap 5) -->
+    <div class="modal fade show" id="profile-overlay" style="display: none; background: rgba(0, 0, 0, 0.7);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-person-circle me-2"></i>Perfil de Utilizador
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" onclick="closeProfileModal()"></button>
                 </div>
-            </div>
+                <div class="modal-body">
+                    <!-- Profile Info -->
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-username">
+                            <i class="bi bi-person me-1"></i>Username
+                        </label>
+                        <input type="text" class="form-control" id="profile-username" disabled />
+                    </div>
 
-            <div class="btn-group" style="margin-top: 1rem;">
-                <button class="btn" onclick="updateProfileEmail()">💾 Guardar Email</button>
-            </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-email">
+                            <i class="bi bi-envelope me-1"></i>Email
+                        </label>
+                        <input type="email" class="form-control" id="profile-email" placeholder="seu@email.com" />
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>Necessário para recuperação de password
+                        </div>
+                    </div>
 
-            <!-- Change Password Section -->
-            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">🔐 Alterar Password</h3>
+                    <button class="btn btn-primary mb-4" onclick="updateProfileEmail()">
+                        <i class="bi bi-save me-2"></i>Guardar Email
+                    </button>
 
-                <div class="form-group">
-                    <label class="form-label" for="profile-current-password">Password Atual</label>
-                    <input type="password" id="profile-current-password" placeholder="password atual" />
+                    <!-- Change Password Section -->
+                    <hr class="my-4">
+                    <h5 class="mb-3">
+                        <i class="bi bi-shield-lock me-2"></i>Alterar Password
+                    </h5>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-current-password">
+                            <i class="bi bi-key me-1"></i>Password Atual
+                        </label>
+                        <input type="password" class="form-control" id="profile-current-password" placeholder="password atual" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-new-password">
+                            <i class="bi bi-key-fill me-1"></i>Nova Password
+                        </label>
+                        <input type="password" class="form-control" id="profile-new-password" placeholder="nova password" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-new-password-confirm">
+                            <i class="bi bi-shield-check me-1"></i>Confirmar Nova Password
+                        </label>
+                        <input type="password" class="form-control" id="profile-new-password-confirm" placeholder="confirme a nova password" />
+                    </div>
+
+                    <button class="btn btn-warning" onclick="changePasswordFromProfile()">
+                        <i class="bi bi-key me-2"></i>Alterar Password
+                    </button>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="profile-new-password">Nova Password</label>
-                    <input type="password" id="profile-new-password" placeholder="nova password" />
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeProfileModal()">
+                        <i class="bi bi-x-circle me-2"></i>Fechar
+                    </button>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="profile-new-password-confirm">Confirmar Nova Password</label>
-                    <input type="password" id="profile-new-password-confirm" placeholder="confirme a nova password" />
-                </div>
-
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn" onclick="changePasswordFromProfile()" style="background: var(--warning);">🔑 Alterar Password</button>
-                </div>
-            </div>
-
-            <div class="btn-group" style="margin-top: 1.5rem;">
-                <button class="btn" onclick="closeProfileModal()" style="background: var(--text-secondary);">Fechar</button>
             </div>
         </div>
     </div>
@@ -1473,5 +1746,8 @@
             <a href="mailto:support@saft-doctor.com">📧 Contactar Suporte</a>
         </div>
     </div>
+
+    <!-- Bootstrap 5 JS Bundle (includes Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
