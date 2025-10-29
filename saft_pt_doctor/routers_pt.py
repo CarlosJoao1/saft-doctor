@@ -2188,3 +2188,23 @@ async def extract_documents_from_storage(request: Request, current=Depends(get_c
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f'Failed to extract documents: {str(e)}')
+
+@router.post('/upload/extract-accounting')
+async def extract_accounting_data(request: Request, current=Depends(get_current_user)):
+    '''
+    Extract aggregated accounting data from SAFT file
+    Returns mock data for now (parser has XML encoding issues)
+    '''
+    from core.saft_accounting_mock import get_mock_accounting_data
+    
+    body = await request.json()
+    upload_id = body.get('upload_id')
+    
+    if not upload_id:
+        raise HTTPException(status_code=400, detail='upload_id required')
+    
+    # For now, return mock data
+    # TODO: Integrate with real parser when XML encoding issues are resolved
+    print(f'[ACCOUNTING] Returning mock aggregated data for upload_id={upload_id}')
+    
+    return get_mock_accounting_data()
