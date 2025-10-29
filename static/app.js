@@ -694,6 +694,7 @@ window.updateNavbar = function() {
     const usernameEl = document.getElementById('navbar-username');
     const logoutBtn = document.getElementById('btn-logout');
     const profileBtn = document.getElementById('btn-profile');
+    const configTabLi = document.getElementById('config-tab-li');
     const adminTab = document.getElementById('admin-tab');
     const adminTabLi = document.getElementById('admin-tab-li');
     const overlay = document.getElementById('login-overlay');
@@ -706,7 +707,10 @@ window.updateNavbar = function() {
         // Hide login overlay
         if (overlay) overlay.style.display = 'none';
 
-        // Show Admin tab only for sysadmin
+        // Show Config and Admin tabs only for sysadmin
+        if (configTabLi) {
+            configTabLi.style.display = (window.state.role === 'sysadmin') ? 'block' : 'none';
+        }
         if (adminTab) {
             adminTab.style.display = (window.state.role === 'sysadmin') ? 'inline-block' : 'none';
             console.log('[DEBUG] updateNavbar: Admin tab visible:', window.state.role === 'sysadmin');
@@ -718,6 +722,7 @@ window.updateNavbar = function() {
         if (usernameEl) usernameEl.textContent = 'Não autenticado';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (profileBtn) profileBtn.style.display = 'none';
+        if (configTabLi) configTabLi.style.display = 'none';
         if (adminTab) adminTab.style.display = 'none';
         if (adminTabLi) adminTabLi.style.display = 'none';
 

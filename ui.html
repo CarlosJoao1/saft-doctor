@@ -508,7 +508,7 @@
             }
         }
     </style>
-    <script src="/static/app.js?v=66"></script>
+    <script src="/static/app.js?v=67"></script>
 </head>
 <body>
     <!-- Navbar fixa no topo -->
@@ -705,7 +705,7 @@
                     <i class="bi bi-shield-lock me-2"></i>Credenciais AT
                 </button>
             </li>
-            <li class="nav-item">
+            <li class="nav-item" id="config-tab-li" style="display: none;">
                 <button class="nav-link" data-tab="config" onclick="showTab('config')" type="button">
                     <i class="bi bi-gear me-2"></i>Configuração
                 </button>
@@ -716,13 +716,6 @@
                 </button>
             </li>
         </ul>
-
-        <div class="form-check mb-4">
-            <input class="form-check-input" type="checkbox" id="hb">
-            <label class="form-check-label" for="hb">
-                Auto-reload quando o backend reinicia (opcional)
-            </label>
-        </div>
 
         <!-- TAB: Validação -->
         <div id="panel-app" class="tabpanel active">
@@ -1170,8 +1163,30 @@
             </div>
         </div>
 
-        <!-- TAB: Configuração -->
+        <!-- TAB: Configuração (Sysadmin only) -->
         <div id="panel-config" class="tabpanel">
+            <!-- Auto-reload Option -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Auto-reload
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="hb">
+                        <label class="form-check-label" for="hb">
+                            Auto-reload quando o backend reinicia (opcional)
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Quando ativado, a página recarrega automaticamente quando o servidor reinicia
+                    </small>
+                </div>
+            </div>
+
+            <!-- FACTEMICLI.jar Installation -->
             <div class="card shadow-sm">
                 <div class="card-header bg-primary text-white">
                     <h5 class="card-title mb-0">
